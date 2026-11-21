@@ -1,0 +1,15 @@
+**/node_modules/
+**/dist/
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/techhrms.db
+**/techhrms.db-*
+**/*.sqlite
+**/*.db
+**/appsettings.Development.json
+**/.env
+**/.env.*
+!**/.env.example
+.DS_Store

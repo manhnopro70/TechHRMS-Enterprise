@@ -1,0 +1,14 @@
+export type Role = 'Admin' | 'HR' | 'Manager' | 'Employee'
+export type Page = 'dashboard' | 'employees' | 'departments' | 'requests' | 'skills' | 'projects' | 'assets' | 'candidates' | 'objectives' | 'audit' | 'organization' | 'contracts' | 'onboarding' | 'attendance' | 'learning' | 'insights' | 'roadmap'
+export type Session = { id: number; name: string; email: string; role: Role; jobTitle: string; department: string }
+export type Department = { id: number; name: string; code: string; employeeCount: number }
+export type Employee = { id: number; fullName: string; email: string; jobTitle: string; departmentId: number; department: string; workMode: string; status: string; isBench: boolean; joinedAt: string }
+export type Dashboard = { totalEmployees: number; departments: number; remoteEmployees: number; benchEmployees: number; pendingRequests: number; assets: number; workforceByDepartment: { name: string; count: number }[]; portal: string; isPersonal: boolean }
+export type WorkRequest = { id: number; employeeId: number; employee: string; type: string; startDate: string; endDate: string; reason: string; status: string; reviewNote: string | null; createdAtUtc: string }
+export type Skill = { id: number; employeeId: number; employee: string; name: string; level: string; certificate: string | null }
+export type Asset = { id: number; assetTag: string; name: string; status: string; assignedToEmployeeId: number | null; assignedTo: string }
+export type Project = { id: number; code: string; name: string; status: string; allocationCount: number }
+export type Allocation = { id: number; employeeId: number; employee: string; techProjectId: number; project: string; percent: number }
+export type Candidate = { id: number; fullName: string; email: string; position: string; stage: string; appliedAtUtc: string }
+export type Objective = { id: number; employeeId: number; employee: string; title: string; quarter: string; progress: number }
+export type Audit = { id: number; actorEmployeeId: number; action: string; entity: string; details: string; atUtc: string }

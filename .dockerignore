@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/bin
+**/obj
+**/.git
+**/.env*
+**/*.db
+**/*.sqlite
+**/.vs
+**/.vscode
+**/techhrms.db*
