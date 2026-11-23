@@ -1,3 +1,5 @@
+using System.Data;
+using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
 
 namespace TechHRMS.Api;
@@ -33,7 +35,7 @@ public static partial class HrEndpoints
                 remoteEmployees = await workforce.CountAsync(x => x.WorkMode == "Remote"),
                 benchEmployees = await workforce.CountAsync(x => x.IsBench),
                 pendingRequests = await requests.CountAsync(x => x.Status == "Pending"),
-                assets = await db.Assets.CountAsync(x => Access.IsHr(ctx.User) || x.AssignedToEmployeeId == myId),
+                assets = Access.IsHr(ctx.User) ? await db.Assets.CountAsync() : await db.Assets.CountAsync(x => x.AssignedToEmployeeId == myId),
                 workforceByDepartment = await workforce.GroupBy(x => x.Department!.Name)
                     .Select(g => new { name = g.Key, count = g.Count() }).OrderByDescending(x => x.count).ToListAsync(),
                 portal = ctx.User.IsInRole("Admin") || ctx.User.IsInRole("HR") ? "HR & Admin"
@@ -95,47 +97,99 @@ public static partial class HrEndpoints
             var jobTitle = (input.JobTitle ?? "").Trim();
             if (name.Length is < 2 or > 120 || !LooksLikeEmail(email) || jobTitle.Length is < 2 or > 120)
                 return Bad("Họ tên, email hoặc chức danh không hợp lệ.");
-            if (!await db.Departments.AnyAsync(x => x.Id == input.DepartmentId)) return Bad("Phòng ban không tồn tại.");
-            if (await db.Employees.AnyAsync(x => x.Email == email)) return Bad("Email đã tồn tại.");
             if (!AllowedWorkModes.Contains(input.WorkMode) || !AllowedEmployeeStatuses.Contains(input.Status)) return Bad("Trạng thái không hợp lệ.");
+            if (input.Account is not null)
+            {
+                if (!Access.IsAdmin(ctx.User)) return Results.Forbid();
+                if (!AccountRules.Roles.Contains(input.Account.Role) || !Passwords.IsValid(input.Account.Password))
+                    return Bad("Vai trò hoặc mật khẩu tài khoản không hợp lệ (12–128 ký tự).");
+                if (input.Status == "Inactive") return Bad("Không thể cấp tài khoản cho nhân viên đã ngừng làm việc.");
+            }
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            await AccountRules.LockWritesAsync(db);
+            if (!await db.Departments.AnyAsync(x => x.Id == input.DepartmentId)) return Bad("Phòng ban không tồn tại.");
+            if (await db.Employees.AnyAsync(x => x.Email == email) || await db.Accounts.AnyAsync(x => x.Email == email))
+                return Results.Conflict(new { error = "Email đã tồn tại." });
             var item = new Employee { FullName = name, Email = email, JobTitle = jobTitle, DepartmentId = input.DepartmentId,
                 WorkMode = input.WorkMode, Status = input.Status, IsBench = input.IsBench };
             db.Employees.Add(item);
+            if (input.Account is not null)
+            {
+                db.Accounts.Add(new Account { Employee = item, Email = email, Role = input.Account.Role,
+                    PasswordHash = Passwords.Hash(input.Account.Password), MustChangePassword = true });
+                Access.Log(db, ctx.User, "CreateAccount", "Account", $"Email={email};Role={input.Account.Role}");
+            }
             Access.Log(db, ctx.User, "Create", "Employee", email);
             await db.SaveChangesAsync();
-            return Results.Ok(new { item.Id });
+            await tx.CommitAsync();
+            return Results.Ok(new { item.Id, accountCreated = input.Account is not null });
         });
 
         api.MapPut("/employees/{id:int}", async Task<IResult> (int id, EmployeeInput input, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User)) return Results.Forbid();
-            var item = await db.Employees.FindAsync(id);
-            if (item is null) return Results.NotFound();
+            if (input.Account is not null) return Bad("Vui lòng dùng mục Tài khoản để cấp hoặc cập nhật quyền đăng nhập.");
             var name = (input.FullName ?? "").Trim();
             var email = (input.Email ?? "").Trim().ToLowerInvariant();
             var jobTitle = (input.JobTitle ?? "").Trim();
             if (name.Length is < 2 or > 120 || !LooksLikeEmail(email) || jobTitle.Length is < 2 or > 120)
                 return Bad("Dữ liệu nhân viên không hợp lệ.");
-            if (!await db.Departments.AnyAsync(x => x.Id == input.DepartmentId)) return Bad("Phòng ban không tồn tại.");
-            if (await db.Employees.AnyAsync(x => x.Id != id && x.Email == email)) return Bad("Email đã tồn tại.");
             if (!AllowedWorkModes.Contains(input.WorkMode) || !AllowedEmployeeStatuses.Contains(input.Status)) return Bad("Trạng thái không hợp lệ.");
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            await AccountRules.LockWritesAsync(db);
+            var item = await db.Employees.FindAsync(id);
+            if (item is null) return Results.NotFound();
+            var account = await db.Accounts.FirstOrDefaultAsync(x => x.EmployeeId == id);
+            if (account?.Role == "Admin" && !Access.IsAdmin(ctx.User)) return Results.Forbid();
+            if (input.Status == "Inactive")
+            {
+                if (id == Access.EmployeeId(ctx.User)) return Bad("Không thể tự ngừng hoạt động hồ sơ đang sử dụng.");
+                if (!await AccountRules.CanDeactivateAsync(db, id)) return Results.Conflict(new { error = "Cần giữ ít nhất một quản trị viên đang hoạt động." });
+            }
+            if (!await db.Departments.AnyAsync(x => x.Id == input.DepartmentId)) return Bad("Phòng ban không tồn tại.");
+            if (await db.Employees.AnyAsync(x => x.Id != id && x.Email == email) ||
+                await db.Accounts.AnyAsync(x => x.EmployeeId != id && x.Email == email)) return Results.Conflict(new { error = "Email đã tồn tại." });
+            var securityChanged = item.Email != email || item.DepartmentId != input.DepartmentId || item.Status != input.Status;
             item.FullName = name; item.Email = email; item.JobTitle = jobTitle; item.DepartmentId = input.DepartmentId;
             item.WorkMode = input.WorkMode; item.Status = input.Status; item.IsBench = input.IsBench;
-            var account = await db.Accounts.FirstOrDefaultAsync(x => x.EmployeeId == id);
-            if (account is not null) account.Email = email;
-            Access.Log(db, ctx.User, "Update", "Employee", id.ToString());
-            await db.SaveChangesAsync();
+            if (account is not null)
+            {
+                account.Email = email;
+                if (securityChanged) account.SecurityStamp = Guid.NewGuid().ToString("N");
+                if (input.Status == "Inactive") account.IsActive = false;
+            }
+            Access.Log(db, ctx.User, "Update", "Employee", $"Id={id};Department={input.DepartmentId};Status={input.Status}");
+            await db.SaveChangesAsync(); await tx.CommitAsync();
+            if (account is not null && id == Access.EmployeeId(ctx.User))
+            {
+                await db.Entry(item).Reference(x => x.Department).LoadAsync();
+                account.Employee = item;
+                await AccountRules.SignInAsync(ctx, account);
+            }
             return Results.Ok(new { item.Id });
         });
+        api.MapPut("/departments/{id:int}", async Task<IResult> (int id, DepartmentInput input, HttpContext ctx, HrDb db) =>
+        {
+            if (!Access.IsHr(ctx.User)) return Results.Forbid();
+            var name = (input.Name ?? "").Trim(); var code = (input.Code ?? "").Trim().ToUpperInvariant();
+            if (code.Length is < 2 or > 12 || name.Length is < 2 or > 100) return Bad("Mã hoặc tên phòng ban không hợp lệ.");
+            var department = await db.Departments.FindAsync(id);
+            if (department is null) return Results.NotFound();
+            if (await db.Departments.AnyAsync(x => x.Id != id && x.Code == code)) return Results.Conflict(new { error = "Mã phòng ban đã tồn tại." });
+            department.Name = name; department.Code = code;
+            Access.Log(db, ctx.User, "Update", "Department", id.ToString());
+            await db.SaveChangesAsync(); return Results.Ok(new { department.Id });
+        });
+
     }
 
     private static readonly string[] AllowedWorkModes = ["Remote", "Hybrid", "Onsite"];
     private static readonly string[] AllowedEmployeeStatuses = ["Active", "OnLeave", "Inactive"];
     private static readonly string[] AllowedRequestTypes = ["Leave", "WFH", "OT"];
     private static readonly string[] AllowedStages = ["Applied", "TechnicalTest", "Interview", "Offer", "Hired", "Rejected"];
-    private static bool LooksLikeEmail(string s) => s.Length is >= 5 and <= 180 && s.Contains('@') && !s.Contains(' ');
+    private static bool LooksLikeEmail(string s) => s.Length is >= 5 and <= 180 && MailAddress.TryCreate(s, out var parsed) && parsed.Address == s && s.Contains('@');
     private static IResult Bad(string message) => Results.BadRequest(new { error = message });
 }
 
 public record DepartmentInput(string Name, string Code);
-public record EmployeeInput(string FullName, string Email, string JobTitle, int DepartmentId, string WorkMode, string Status, bool IsBench);
+public record EmployeeInput(string FullName, string Email, string JobTitle, int DepartmentId, string WorkMode, string Status, bool IsBench, ProvisionAccountInput? Account = null);

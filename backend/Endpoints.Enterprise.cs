@@ -112,7 +112,7 @@ public static partial class HrEndpoints
         {
             var now = DateOnly.FromDateTime(DateTime.UtcNow);
             if (string.IsNullOrWhiteSpace(month)) month = now.ToString("yyyy-MM");
-            if (!DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd", out var from)) return Bad("Tháng phải có dạng YYYY-MM.");
+            if (!DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd", out var from) || from.Year is < 2000 or > 2100) return Bad("Tháng phải có dạng YYYY-MM, năm từ 2000–2100.");
             var until = from.AddMonths(1);
             var myId = Access.EmployeeId(ctx.User);
             var query = db.TimeEntries.AsNoTracking().Where(x => x.WorkDate >= from && x.WorkDate < until);
@@ -129,11 +129,14 @@ public static partial class HrEndpoints
         });
         api.MapPost("/attendance/check-in", async Task<IResult> (CheckInInput input, HttpContext ctx, HrDb db) =>
         {
+            await using var transaction = await Operations.BeginAsync(db);
             if (!WorkModes.Contains(input.Mode)) return Bad("Hình thức làm việc không hợp lệ.");
             var note = (input.Note ?? "").Trim();
             if (note.Length > 240) return Bad("Ghi chú không được vượt 240 ký tự.");
             var actor = Access.EmployeeId(ctx.User);
             if (!await db.Employees.AnyAsync(e => e.Id == actor && e.Status == "Active")) return Results.Forbid();
+            if (await db.TimeEntries.AnyAsync(x => x.EmployeeId == actor && x.CheckOutUtc == null))
+                return Bad("Bạn còn phiên làm việc chưa check-out. Hãy kết thúc phiên trước khi check-in mới.");
             var timeZoneId = ctx.RequestServices.GetRequiredService<IConfiguration>()["HRMS_TIME_ZONE"] ?? "Asia/Ho_Chi_Minh";
             TimeZoneInfo zone;
             try { zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
@@ -146,18 +149,19 @@ public static partial class HrEndpoints
                 Mode = input.Mode, Note = note };
             db.TimeEntries.Add(entry);
             Access.Log(db, ctx.User, "CheckIn", "Attendance", today.ToString("yyyy-MM-dd"));
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { entry.Id, entry.WorkDate, entry.CheckInUtc });
         });
         api.MapPost("/attendance/check-out", async Task<IResult> (HttpContext ctx, HrDb db) =>
         {
+            await using var transaction = await Operations.BeginAsync(db);
             var actor = Access.EmployeeId(ctx.User);
             var item = await db.TimeEntries.Where(x => x.EmployeeId == actor && x.CheckOutUtc == null)
                 .OrderByDescending(x => x.CheckInUtc).FirstOrDefaultAsync();
             if (item is null) return Bad("Không tìm thấy phiên làm việc chưa check-out.");
             item.CheckOutUtc = DateTime.UtcNow;
             Access.Log(db, ctx.User, "CheckOut", "Attendance", item.Id.ToString());
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { item.Id, item.CheckOutUtc });
         });
 

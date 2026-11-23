@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace TechHRMS.Api;
 
@@ -10,13 +11,15 @@ public static class Seed
         var db = scope.ServiceProvider.GetRequiredService<HrDb>();
         // DEMO ONLY: a first-run schema bootstrap. Introduce versioned EF migrations before real production use.
         await db.Database.EnsureCreatedAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await AccountRules.LockWritesAsync(db);
         if (await db.Accounts.AnyAsync()) return;
 
         var isDemo = environment.IsDevelopment() || string.Equals(config["SEED_SAMPLE_DATA"], "true", StringComparison.OrdinalIgnoreCase);
         var adminEmail = (config["SEED_ADMIN_EMAIL"] ?? "admin@techhrms.local").ToLowerInvariant();
         var adminPassword = config["SEED_ADMIN_PASSWORD"];
-        if (!environment.IsDevelopment() && (string.IsNullOrWhiteSpace(adminPassword) || adminPassword.Length < 12))
-            throw new InvalidOperationException("Production requires SEED_ADMIN_PASSWORD (at least 12 characters) on first start.");
+        if (!environment.IsDevelopment() && !Passwords.IsValid(adminPassword))
+            throw new InvalidOperationException("Production requires SEED_ADMIN_PASSWORD (12 to 128 characters) on first start.");
 
         var engineering = new Department { Code = "ENG", Name = "Engineering" };
         var product = new Department { Code = "PRD", Name = "Product & Design" };
@@ -46,10 +49,10 @@ public static class Seed
 
         db.Accounts.Add(new Account { EmployeeId = employees[0].Id, Email = adminEmail, PasswordHash = Passwords.Hash(adminPassword ?? "LocalDemo@2026!"), Role = "Admin" });
         var demoPassword = environment.IsDevelopment() ? "LocalDemo@2026!" : config["SEED_DEMO_PASSWORD"];
-        if (isDemo && !string.IsNullOrWhiteSpace(demoPassword) && demoPassword.Length >= 12)
+        if (isDemo && Passwords.IsValid(demoPassword))
         {
             foreach (var (index, role) in new [] { (1,"HR"), (2,"Manager"), (3,"Employee") })
-                db.Accounts.Add(new Account { EmployeeId = employees[index].Id, Email = employees[index].Email, PasswordHash = Passwords.Hash(demoPassword), Role = role });
+                db.Accounts.Add(new Account { EmployeeId = employees[index].Id, Email = employees[index].Email, PasswordHash = Passwords.Hash(demoPassword!), Role = role });
         }
         if (isDemo)
         {
@@ -91,6 +94,7 @@ public static class Seed
             ]);
         }
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
 }

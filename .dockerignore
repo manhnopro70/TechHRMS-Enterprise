@@ -9,3 +9,7 @@
 **/.vs
 **/.vscode
 **/techhrms.db*
+artifacts
+desktop
+tests
+test-results

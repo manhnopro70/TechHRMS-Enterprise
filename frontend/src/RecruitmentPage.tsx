@@ -1,0 +1,40 @@
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { api } from './api'
+import type { Candidate, Department } from './types'
+import { Alert, Busy, Field, Heading, message, Metrics, Modal, Submit, today, useResource } from './ui'
+
+type Applicant = Candidate & { hiredEmployeeId?: number | null }
+const stages = [{ code: 'Applied', name: 'Nộp hồ sơ' }, { code: 'TechnicalTest', name: 'Test kỹ thuật' }, { code: 'Interview', name: 'Phỏng vấn' }, { code: 'Offer', name: 'Đề nghị tuyển' }, { code: 'Hired', name: 'Đã tuyển' }, { code: 'Rejected', name: 'Từ chối' }]
+type Props = { version: number; reload: () => void; notify: (text: string, good?: boolean) => void; departments: Department[] }
+export function RecruitmentPage({ version, reload, notify, departments }: Props) {
+  const { data, loading, error } = useResource<Applicant[]>('/candidates', version)
+  const [query, setQuery] = useState(''), [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [formError, setFormError] = useState('')
+  const [form, setForm] = useState({ fullName: '', email: '', position: '' })
+  const [hire, setHire] = useState<Applicant | null>(null), [hireForm, setHireForm] = useState({ departmentId: 0, jobTitle: '', workMode: 'Hybrid', joinedAt: today() })
+  const [dragged, setDragged] = useState<number | null>(null), [dropStage, setDropStage] = useState('')
+  const items = (data ?? []).filter(c => `${c.fullName} ${c.email} ${c.position}`.toLocaleLowerCase('vi-VN').includes(query.toLocaleLowerCase('vi-VN')))
+  async function add(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setFormError('')
+    try { await api.send('POST', '/candidates', form); notify('Đã thêm hồ sơ ứng viên.'); setOpen(false); setForm({ fullName: '', email: '', position: '' }); reload() } catch (error) { setFormError(message(error)) } finally { setBusy(false) }
+  }
+  async function move(id: number, stage: string) {
+    const candidate = data?.find(c => c.id === id)
+    if (!candidate || candidate.stage === stage) return
+    if (stage === 'Hired' && !candidate.hiredEmployeeId) { launchHire(candidate); return }
+    setBusy(true); try { await api.send('PUT', `/candidates/${id}/stage`, { stage }); notify('Đã chuyển vòng tuyển dụng.'); reload() } catch (error) { notify(message(error), false) } finally { setBusy(false) }
+  }
+  function launchHire(candidate: Applicant) {
+    if (!['Offer', 'Hired'].includes(candidate.stage)) { notify('Chuyển ứng viên sang Đề nghị tuyển trước khi tiếp nhận.', false); return }
+    setFormError(''); setHire(candidate); setHireForm({ departmentId: departments[0]?.id ?? 0, jobTitle: candidate.position, workMode: 'Hybrid', joinedAt: today() })
+  }
+  async function confirmHire(event: FormEvent) {
+    event.preventDefault(); if (!hire) return; setBusy(true); setFormError('')
+    try { await api.send('POST', `/candidates/${hire.id}/hire`, hireForm); notify('Đã tạo hồ sơ nhân viên và checklist tiếp nhận. Quản trị viên có thể cấp tài khoản ở mục Tài khoản.'); setHire(null); reload() } catch (error) { setFormError(message(error)) } finally { setBusy(false) }
+  }
+  return <><Heading eyebrow="TALENT / TUYỂN DỤNG" title="Hành trình ứng viên" description="Kéo thẻ sang vòng tiếp theo hoặc dùng danh sách trên thẻ. Tiếp nhận ứng viên để tạo hồ sơ nhân viên." action={<button className="button primary" onClick={() => { setFormError(''); setOpen(true) }}>＋ Thêm ứng viên</button>}/><Metrics items={[{ label: 'Tổng ứng viên', value: data?.length ?? 0 }, { label: 'Đang xét tuyển', value: data?.filter(c => !['Hired', 'Rejected'].includes(c.stage)).length ?? 0 }, { label: 'Đang đề nghị tuyển', value: data?.filter(c => c.stage === 'Offer').length ?? 0 }, { label: 'Đã tiếp nhận', value: data?.filter(c => c.hiredEmployeeId).length ?? 0 }]}/>
+    <div className="toolbar"><input className="search" aria-label="Tìm kiếm ứng viên" value={query} onChange={e => setQuery(e.target.value)} placeholder="Tìm tên, email hoặc vị trí…"/><span className="result-count">{items.length} hồ sơ</span></div><Alert>{error}</Alert>{loading ? <Busy/> : <div className="kanban v4-kanban">{stages.map(stage => <section key={stage.code} className={`kanban-column ${dropStage === stage.code ? 'v4-drop-target' : ''}`} aria-label={stage.name} onDragOver={event => { if (dragged && !busy) { event.preventDefault(); setDropStage(stage.code) } }} onDragLeave={() => setDropStage('')} onDrop={event => { event.preventDefault(); if (dragged && !busy) void move(dragged, stage.code); setDragged(null); setDropStage('') }}><div className="kanban-heading"><h2>{stage.name}</h2><span>{items.filter(c => c.stage === stage.code).length}</span></div>{items.filter(c => c.stage === stage.code).map(candidate => <article key={candidate.id} className="candidate-card" draggable={!busy && !candidate.hiredEmployeeId} onDragStart={event => { event.dataTransfer.setData('text/plain', String(candidate.id)); event.dataTransfer.effectAllowed = 'move'; setDragged(candidate.id) }} onDragEnd={() => { setDragged(null); setDropStage('') }}><div className="person"><span className="avatar">{candidate.fullName.split(' ').slice(-2).map(x => x[0]).join('')}</span><strong>{candidate.fullName}</strong></div><p>{candidate.position}</p><small>{candidate.email}</small>{candidate.hiredEmployeeId ? <div className="v4-hired-label">✓ Đã tạo hồ sơ nhân viên</div> : <><select aria-label={`Chuyển vòng ${candidate.fullName}`} disabled={busy} value={candidate.stage} onChange={e => move(candidate.id, e.target.value)}>{stages.filter(s => s.code !== 'Hired' || candidate.stage === 'Hired').map(s => <option key={s.code} value={s.code}>{s.name}</option>)}</select>{['Offer', 'Hired'].includes(candidate.stage) && <button className="button primary v4-hire-button" disabled={busy} onClick={() => launchHire(candidate)}>Tiếp nhận nhân viên</button>}</>}</article>)}{!items.some(c => c.stage === stage.code) && <div className="v4-column-empty">Chưa có ứng viên</div>}</section>)}</div>}
+    {open && <Modal title="Thêm ứng viên" onClose={() => { if (!busy) setOpen(false) }}><form className="form-body v4-stack" onSubmit={add}><Alert>{formError}</Alert><Field label="Họ và tên"><input required minLength={2} maxLength={120} value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}/></Field><Field label="Email"><input type="email" required maxLength={200} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field><Field label="Vị trí ứng tuyển"><input required minLength={2} maxLength={120} value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}/></Field><Submit busy={busy}>Lưu hồ sơ ứng viên</Submit></form></Modal>}
+    {hire && <Modal title="Tiếp nhận ứng viên trúng tuyển" onClose={() => { if (!busy) setHire(null) }}><form className="form-body v4-stack" onSubmit={confirmHire}><div className="v4-selected-person"><strong>{hire.fullName}</strong><span>{hire.email}</span></div><Alert>{formError}</Alert><Field label="Phòng ban"><select required value={hireForm.departmentId} onChange={e => setHireForm({ ...hireForm, departmentId: Number(e.target.value) })}><option value={0} disabled>Chọn phòng ban</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field><Field label="Chức danh"><input required minLength={2} maxLength={120} value={hireForm.jobTitle} onChange={e => setHireForm({ ...hireForm, jobTitle: e.target.value })}/></Field><div className="form-grid"><Field label="Ngày gia nhập"><input type="date" required value={hireForm.joinedAt} onChange={e => setHireForm({ ...hireForm, joinedAt: e.target.value })}/></Field><Field label="Hình thức"><select value={hireForm.workMode} onChange={e => setHireForm({ ...hireForm, workMode: e.target.value })}><option>Hybrid</option><option>Remote</option><option>Onsite</option></select></Field></div><Alert kind="info">Tạo hồ sơ nhân viên và checklist onboarding từ thông tin ứng viên. Tài khoản đăng nhập được cấp riêng bởi quản trị viên.</Alert><Submit busy={busy || !hireForm.departmentId}>Tạo hồ sơ & checklist</Submit></form></Modal>}
+  </>
+}

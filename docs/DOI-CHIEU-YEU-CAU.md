@@ -1,45 +1,39 @@
-# TechHRMS V3 - doi chieu voi phan tich HRM cap doanh nghiep
+# TechHRMS V4 — đối chiếu yêu cầu và phạm vi thực hiện
 
-> Canh bao: He thong nay la **demo full-stack dung du lieu gia**, chua dap ung yeu cau van hanh HR thuc te. Bang nay phan biet ro 3 muc **co API va Database**, **co mot phan**, **chua trien khai**.
+Bộ mã V4 nối Frontend–API–Database cho các phần được ghi là **đã có**. “Một phần” có nghĩa luồng mô tả chạy được nhưng chưa đầy đủ toàn bộ phân tích HRM của người dùng. Không coi một menu hay dữ liệu minh họa là chức năng đã hoàn thành.
 
-| Nhom chuc nang | Tinh trang V3 | Ghi chu ve pham vi |
+| Nhóm yêu cầu | V4 thực hiện | Giới hạn còn lại |
 | --- | --- | --- |
-| Accounts & roles | Co mot phan | Admin, HR, Manager, Employee, cookie auth; chua co Finance, IT Admin, C-level, SSO/MFA |
-| Core HR - employee | Co mot phan | CRUD them/sua va tim kiem; chua co CC CD, ngan hang, BHXH, lich su hieu luc, tai lieu |
-| Departments | Co API | Danh sach, them; chua co legal entity, branch, team hierarchy |
-| Organization chart | Co API V3 | So luoc theo phong ban, chua phai org tree da phap nhan |
-| Contracts | Co API V3 | Them, xem theo quyen, cap nhat trang thai; khong co van ban/chuky so/luong |
-| Onboarding | Co API V3 | Checklist, vai tro phu trach, han, tick hoan thanh; chua co provision tai khoan tu dong |
-| Offboarding | Chua | Workflow ban giao, thu hoi, chot cong/luong chua lam |
-| Attendance | Co API V3 | Check-in/out co thoi diem tu server, lich su thang; KHONG GPS/IP verified, ca, phep, payroll |
-| Leave/WFH/OT | Co mot phan | Tao don/duyet mot cap, chua co so phep ton, ca lam viec, overtime policy |
-| Skill Matrix | Co API | Them/xoa, level, certificate text; chua co expiring-alert |
-| ATS | Co mot phan | Ung vien va thay stage; chua phieu phong van, offer letter, calendar |
-| Project allocation | Co API | Du an, % allocation, bench; chua timesheet, billable, forecast |
-| IT Assets | Co API | Device asset tag, cap phat; chua license, offboarding provisioning |
-| OKRs | Co mot phan | Muc tieu va tien do; chua evaluation cycle, 360, calibration, 9-box |
-| Learning & Development | Co API V3 | Danh muc khoa hoc, dang ky, tu cap nhat trang thai; chua LMS, certificate verification |
-| HR Analytics | Co API V3 | Headcount, work mode, pending, attendance count; KHONG bao cao chi phi hay turnover lich su |
-| Payroll/C&B/Tax/Insurance | Chua | Can policy table co ngay hieu luc, phe duyet, cac quy dinh hien hanh, kiem thu nghiep vu |
-| Internal engagement | Chua | Bang tin, eNPS, kudos, surveys, chatbot |
-| Workflow engine | Chua | Duyẹt Leave/WFH/OT mot cap; chua configurable multi-step approval |
-| Fine-grained ABAC | Co mot phan | Chi scope nhan vien/phong ban va 4 roles; chua phap nhan/chi nhanh |
-| Audit trail | Co mot phan | Log thay doi chinh, chua full tamper-evident audit, retention |
-| Notifications | Co UI tạm | Chuong thong bao don tu hien co, khong phai realtime/server push |
-| Excel/PDF and import | Co mot phan | Co xuat CSV nhan vien an toan; chua import mass, PDF, report builder |
-| Integrations | Chua | SSO, Microsoft 365, Google Workspace, Slack, Teams, Jira, MISA, ngan hang ... |
-| Enterprise compliance | Chua | Chua privacy impact assessment, retention, access/deletion workflow, MFA, encryption key management |
-| Production maturity | Chua | EnsureCreated + additive DDL demo; can migrations, backup/DR, secrets, CI, tests, pen test, monitoring |
+| Tài khoản/đăng nhập | Admin cấp từ hồ sơ có sẵn hoặc lúc tạo hồ sơ; 4 vai trò; đổi/reset mật khẩu; bắt buộc đổi lần đầu; khóa/mở/thu hồi phiên | Chưa SSO, MFA, tự gửi mail, tự đăng ký công khai |
+| Phân quyền | Backend kiểm tra vai trò và phạm vi self/phòng ban/toàn hệ thống; giới hạn lương riêng | Chưa Finance/ITAdmin/Executive độc lập, ABAC pháp nhân/chi nhánh |
+| Core HR | Tạo/sửa/tìm hồ sơ, email, chức danh, phòng ban, trạng thái, work mode, bench; xem/sửa tên cá nhân | Chưa CCCD/ngân hàng/BHXH/người phụ thuộc, effective dating, tài liệu upload |
+| Tổ chức | Thêm/sửa phòng ban, tổng hợp số người | Chưa nhiều pháp nhân, chi nhánh, team và cây báo cáo nhiều cấp |
+| Hợp đồng | Danh mục hợp đồng, thời hạn, trạng thái, phạm vi xem | Chưa mẫu văn bản thực, phụ lục, ký số và nhắc hạn qua email |
+| ATS | Ứng viên, Kanban kéo thả/select, đổi vòng; từ Offer/Hired tạo nhân viên và onboarding đúng một lần | Chưa parse/upload CV, requisition, đăng job ra ngoài, lịch/scorecard/offer letter |
+| Onboarding | Checklist theo nhân viên, người phụ trách theo vai trò, hạn/trạng thái; ATS tạo checklist tự động | Chưa tự cấp GitHub/Jira/Google/Slack; Admin cấp tài khoản HRM trong màn tài khoản |
+| Offboarding | Checklist, ngày cuối, hoàn tất có transaction; khóa HRM, đổi stamp, thu hồi tài sản/phân bổ, hủy đơn chờ, giữ lịch sử | Chưa khóa hệ thống bên ngoài, tính quyết toán cuối, exit interview hoặc tái tuyển dụng cùng hồ sơ offboarding |
+| Chấm công | Check-in/out theo giờ server, lịch sử tháng, không mở phiên mới khi phiên cũ chưa đóng | Chưa GPS/IP verified, face/máy chấm công, ca linh hoạt, sửa công/giải trình, tổng hợp công chuẩn payroll |
+| Phép/WFH/OT | Tạo, duyệt/từ chối, lý do từ chối, hủy đơn chờ; giữ phép pending; kiểm tra trùng; lưu giờ OT | Chưa lịch lễ/nửa ngày/phép chuyển năm/loại phép chuyên sâu, duyệt đa cấp và chính sách OT pháp định |
+| Hạn mức phép | Theo nhân viên/năm, HR cấu hình; tính thứ Hai–thứ Sáu, đã dùng/đang chờ/khả dụng | Mặc định demo 12 ngày không phải tính quyền lợi theo hợp đồng/pháp luật |
+| Dự án/nguồn lực | Tạo dự án, phân bổ phần trăm, giới hạn tổng 100%, thu hồi | Chưa allocation theo khoảng hiệu lực, dự báo staffing hoặc tích hợp Jira |
+| Giờ công dự án | Nháp/sửa/xóa/gửi/duyệt/từ chối, billable flag, dự án được phân bổ, tối đa24 giờ/ngày | Chưa hóa đơn khách hàng, khóa kỳ timesheet hoặc định giá giờ công |
+| Tài sản IT | Tạo tài sản, cấp/thu hồi, liên kết offboarding | Chưa software license, lịch sử bảo hành/bảo trì hoặc API cấp quyền |
+| Kỹ năng | Skill matrix theo người, level, tên chứng chỉ, tìm nhân sự | Chưa ngày hết hạn/cảnh báo chứng chỉ hoặc chuẩn hóa khung năng lực |
+| Hiệu suất | OKR, quý, người sở hữu, cập nhật tiến độ | Chưa chu kỳ tự/manager review,360°, calibration, 9-box, PIP |
+| Đào tạo | Danh mục khóa học, đăng ký, trạng thái học | Chưa LMS/nội dung video/kiểm tra/chứng chỉ được xác minh |
+| Lương demo | Tạo kỳ, nhập khoản thu/khấu trừ, tổng gross/net, duyệt, Admin phát hành, khóa, xem phiếu theo quyền, in/PDF qua trình duyệt | Chưa công/OT tự tính vào lương, thuế/BHXH theo luật, nhiều tiền tệ, chuyển khoản, hai người độc lập duyệt |
+| Phúc lợi/chi phí | Chưa có | Expense, hoàn ứng, phúc lợi, ESOP, reviewlương, ngân sách |
+| Thông báo | Lưu DB theo người, chưa đọc, đánh dấu, link nghiệp vụ; UI cập nhật mỗi 30 giây khi hiển thị | Chưa server push/SignalR, email/Slack/Teams/push mobile |
+| Audit | Ghi thao tác chính, người thao tác/thời gian; không log mật khẩu | Chưa toàn bộ old/new snapshot, retention, chống sửa nhật ký bằng quản trị DB |
+| Báo cáo | Headcount/hình thức làm việc/phòng ban/đơn/chấm công, CSV nhân viên, tổng lương nhập | Chưa turnover lịch sử, chi phí tuyển dụng, report builder, toàn bộ Excel/PDF/import |
+| Gắn kết | Chưa có | Bảng tin/kudos/khảo sát/eNPS/chatbot |
+| Đa ngôn ngữ/quốc tế | UI tiếng Việt, định dạng thời gian phù hợp demo; múi giờ Backend cấu hình | Chưa bộ dịchViệt/Anh, đa tiền tệ, visa/workpermit |
+| Database | SQLite local, PostgreSQL triển khai; nâng cấp có phiên bản, thêm bảng/cột/index; giữ dữ liệu cũ | Chưa chuyển toàn bộ lịch sử sang EF migrations; bảng V3 cũ giữ thiếu FK như trước |
+| Chất lượng triển khai | Docker full-stack, health, lỗi API, CSRF, thu hồi phiên, khóa lưu DB, kiểm thử HTTP/PG, CI build | Chưa kiểm toán bảo mật độc lập, kiểm tải lớn, backup/DR tự động hoặc chứng nhận tuân thủ |
+| Windows Desktop | Mã WinForms/WebView2 đầy đủ, URL cấu hình, LocalAppData, thử lại, mở trình duyệt, script publish | Cần Internet/WebView2 Runtime; chưa kiểm thử cài MSI trên Windows trong môi trường này; không offline |
 
-## Cap do thuc thi
+## Phân biệt demo hoạt động và hệ thống doanh nghiệp
 
-- **Demo co backend that**: endpoint bao ve bang cookie auth va server-side role access, EF Core/SQLite local, PostgreSQL khi cau hinh Cloud. Khong co du lieu nhan su that.
-- **Do chinh xac**: du lieu thoi gian/tien do chi de minh hoa, khong phai bang cong/phieu luong co gia tri phap ly.
-- **Can ngan rui ro**: khong upload CCCD, hop dong that, payslip, so tai khoan ngan hang hay du lieu luong len demo public.
+Bản V4 có nhiều người đăng nhập bằng quyền khác nhau, lưu dữ liệu lâu dài trên database được cấu hình, xử lý các quy trình và có kiểm tra phía Backend. Điều đó đáp ứng một demo tương tác thực tế để trình bày sản phẩm.
 
-## Ke hoach phat trien theo pha
-
-1. **Pha A - demo tham du cuoc thi**: kiem tra 4 roles, 10 modules cu + 6 modules V3, test CRUD, phan quyen, offline and remote breakpoints.
-2. **Pha B - nghiep vu HR chuyen sau**: legal entity/branch, employee status effective dating, leave balance, OT approval multi-level, onboarding/offboarding state machine, background jobs.
-3. **Pha C - tai chinh/bao mat**: payroll luat co hieu luc thoi gian, 2-person approval, pay period lock, payslip access, audit, PII encryption and retention, MFA/SSO.
-4. **Pha D - production**: migration history, role permission policy engine, automated tests, CI/CD, database backup/restore drills, security review, performance testing, alerts/monitoring.
+Phần phân tích HRM ban đầu còn bao gồm các dự án lớn độc lập như payroll pháp định, danh tính SSO/MFA, tích hợp bên thứ ba và tổ chức đa pháp nhân. Những phần này không được trình bày như đã có trong V4. Nếu phát triển tiếp, cần bổ sung thiết kế và kiểm thử riêng cho từng nhóm, đồng thời nâng cấp nền tảng bảo mật/vận hành.

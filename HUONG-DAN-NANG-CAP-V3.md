@@ -1,3 +1,5 @@
+> Tài liệu lịch sử của bản cũ. Với gói V4, làm theo `HUONG-DAN.md` ở gốc project.
+
 # TechHRMS Enterprise V3 - upgrade tu Premium V2
 
 TechHRMS V3 **khong phai production ready**. Day la ban nang cap demo co workflow that qua React → ASP.NET Core → SQLite/PostgreSQL, danh cho Project `C:\Users\Admin\Desktop\TechHRMS` da cai ban Fullstack Starter + Premium V2.

@@ -1,6 +1,6 @@
 export type Role = 'Admin' | 'HR' | 'Manager' | 'Employee'
-export type Page = 'dashboard' | 'employees' | 'departments' | 'requests' | 'skills' | 'projects' | 'assets' | 'candidates' | 'objectives' | 'audit' | 'organization' | 'contracts' | 'onboarding' | 'attendance' | 'learning' | 'insights' | 'roadmap'
-export type Session = { id: number; name: string; email: string; role: Role; jobTitle: string; department: string }
+export type Page = 'dashboard' | 'employees' | 'departments' | 'requests' | 'skills' | 'projects' | 'assets' | 'candidates' | 'objectives' | 'audit' | 'organization' | 'contracts' | 'onboarding' | 'attendance' | 'learning' | 'insights' | 'roadmap' | 'accounts' | 'profile' | 'notifications' | 'timesheets' | 'payroll'
+export type Session = { id: number; name: string; email: string; role: Role; jobTitle: string; department: string; mustChangePassword: boolean }
 export type Department = { id: number; name: string; code: string; employeeCount: number }
 export type Employee = { id: number; fullName: string; email: string; jobTitle: string; departmentId: number; department: string; workMode: string; status: string; isBench: boolean; joinedAt: string }
 export type Dashboard = { totalEmployees: number; departments: number; remoteEmployees: number; benchEmployees: number; pendingRequests: number; assets: number; workforceByDepartment: { name: string; count: number }[]; portal: string; isPersonal: boolean }

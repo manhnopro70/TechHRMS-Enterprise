@@ -1,0 +1,16 @@
+{
+  "database": "PostgreSQL",
+  "baseline": "baseline-v31",
+  "passed": true,
+  "checks": [
+    "V3 created a real PostgreSQL database with 8 employees and 4 accounts.",
+    "V3 → V4 preserved all employee rows, account IDs, emails, roles and password hashes.",
+    "PostgreSQL queries for all new modules and original operational lists completed.",
+    "Leave reserve/cancel/approve and balance calculations verified on PostgreSQL.",
+    "Decimal timesheet persistence, assignment validation and manager approval verified.",
+    "Payroll arithmetic, published immutability, own-only payslip access and notifications verified.",
+    "ATS hire creates onboarding once; offboarding completes atomically and deactivates employee.",
+    "Second startup idempotent; persisted cookie remains valid after app restart and keys stored in database.",
+    "Fresh V4 PostgreSQL bootstrap, login and operational write verified."
+  ]
+}

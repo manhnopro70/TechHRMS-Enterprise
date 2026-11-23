@@ -1,0 +1,9 @@
+{
+  "version": "4.0.0",
+  "baseRepository": "https://github.com/manhnopro70/TechHRMS-Enterprise",
+  "baseCommit": "2ad577a551aceec568f79963da13f2ddf9247be2",
+  "sourceFiles": 82,
+  "apiChecksPassed": 360,
+  "windowsDeliverable": "Source + publish script; built/published win-x64, Windows GUI/MSI not tested",
+  "frontendBrowserTest": "Blocked at Chromium startup; no browser assertions completed"
+}

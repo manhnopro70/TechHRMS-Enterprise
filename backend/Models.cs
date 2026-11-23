@@ -1,15 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 
 namespace TechHRMS.Api;
 
-public class Department
+public partial class Department
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Code { get; set; } = "";
 }
 
-public class Employee
+public partial class Employee
 {
     public int Id { get; set; }
     public string FullName { get; set; } = "";
@@ -23,7 +24,7 @@ public class Employee
     public DateOnly JoinedAt { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
 }
 
-public class Account
+public partial class Account
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -32,9 +33,13 @@ public class Account
     public string PasswordHash { get; set; } = "";
     public string Role { get; set; } = "Employee";
     public bool IsActive { get; set; } = true;
+    public bool MustChangePassword { get; set; }
+    public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? LastLoginAtUtc { get; set; }
 }
 
-public class WorkRequest
+public partial class WorkRequest
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -49,7 +54,7 @@ public class WorkRequest
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
-public class Skill
+public partial class Skill
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -59,7 +64,7 @@ public class Skill
     public string? Certificate { get; set; }
 }
 
-public class ItAsset
+public partial class ItAsset
 {
     public int Id { get; set; }
     public string AssetTag { get; set; } = "";
@@ -69,7 +74,7 @@ public class ItAsset
     public Employee? AssignedToEmployee { get; set; }
 }
 
-public class TechProject
+public partial class TechProject
 {
     public int Id { get; set; }
     public string Code { get; set; } = "";
@@ -77,7 +82,7 @@ public class TechProject
     public string Status { get; set; } = "Active";
 }
 
-public class ProjectAllocation
+public partial class ProjectAllocation
 {
     public int Id { get; set; }
     public int TechProjectId { get; set; }
@@ -87,7 +92,7 @@ public class ProjectAllocation
     public int Percent { get; set; }
 }
 
-public class Candidate
+public partial class Candidate
 {
     public int Id { get; set; }
     public string FullName { get; set; } = "";
@@ -97,7 +102,7 @@ public class Candidate
     public DateTime AppliedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
-public class Objective
+public partial class Objective
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -107,7 +112,7 @@ public class Objective
     public int Progress { get; set; }
 }
 
-public class AuditLog
+public partial class AuditLog
 {
     public int Id { get; set; }
     public int ActorEmployeeId { get; set; }
@@ -119,7 +124,7 @@ public class AuditLog
 
 
 // V3: separate operational tables; no sensitive salary, identity-document or banking fields are stored.
-public class EmploymentContract
+public partial class EmploymentContract
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -131,7 +136,7 @@ public class EmploymentContract
     public string Notes { get; set; } = "";
 }
 
-public class OnboardingTask
+public partial class OnboardingTask
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -143,7 +148,7 @@ public class OnboardingTask
     public DateTime? CompletedAtUtc { get; set; }
 }
 
-public class TimeEntry
+public partial class TimeEntry
 {
     public int Id { get; set; }
     public int EmployeeId { get; set; }
@@ -154,7 +159,7 @@ public class TimeEntry
     public string Note { get; set; } = "";
 }
 
-public class TrainingCourse
+public partial class TrainingCourse
 {
     public int Id { get; set; }
     public string Code { get; set; } = "";
@@ -164,7 +169,7 @@ public class TrainingCourse
     public string Status { get; set; } = "Published";
 }
 
-public class TrainingEnrollment
+public partial class TrainingEnrollment
 {
     public int Id { get; set; }
     public int CourseId { get; set; }
@@ -174,8 +179,9 @@ public class TrainingEnrollment
     public DateTime? CompletedAtUtc { get; set; }
 }
 
-public class HrDb(DbContextOptions<HrDb> options) : DbContext(options)
+public partial class HrDb(DbContextOptions<HrDb> options) : DbContext(options), IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Account> Accounts => Set<Account>();
@@ -202,6 +208,7 @@ public class HrDb(DbContextOptions<HrDb> options) : DbContext(options)
         builder.Entity<Department>().HasIndex(x => x.Code).IsUnique();
         builder.Entity<Employee>().HasIndex(x => x.Email).IsUnique();
         builder.Entity<Account>().HasIndex(x => x.Email).IsUnique();
+        builder.Entity<Account>().HasIndex(x => x.EmployeeId).HasDatabaseName("UX_Accounts_EmployeeId").IsUnique();
         builder.Entity<ItAsset>().HasIndex(x => x.AssetTag).IsUnique();
         builder.Entity<TechProject>().HasIndex(x => x.Code).IsUnique();
         builder.Entity<ProjectAllocation>().HasIndex(x => new { x.TechProjectId, x.EmployeeId }).IsUnique();
@@ -209,5 +216,7 @@ public class HrDb(DbContextOptions<HrDb> options) : DbContext(options)
         builder.Entity<ItAsset>().HasOne(x => x.AssignedToEmployee).WithMany().HasForeignKey(x => x.AssignedToEmployeeId).OnDelete(DeleteBehavior.Restrict);
         builder.Entity<ProjectAllocation>().HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
         builder.Entity<ProjectAllocation>().HasOne(x => x.TechProject).WithMany().HasForeignKey(x => x.TechProjectId).OnDelete(DeleteBehavior.Cascade);
+        ConfigureOperations(builder);
     }
+    partial void ConfigureOperations(ModelBuilder builder);
 }

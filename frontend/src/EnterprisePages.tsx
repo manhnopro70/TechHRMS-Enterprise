@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode, CSSProperties } from 'react'
 import { api } from './api'
+import { Modal as AccessibleModal } from './ui'
 import type { Employee, Role, Session } from './types'
 
 type Common = { version: number; reload: () => void; notify: (s: string, ok?: boolean) => void; session: Session }
@@ -46,8 +47,7 @@ function Feedback({ loading, error, empty, children }: { loading: boolean; error
   return <>{children}</>
 }
 function EditPanel({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return <div className="v3-modal-overlay" onMouseDown={onClose}><section className="v3-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => e.stopPropagation()}>
-    <header><h2>{title}</h2><button className="v3-icon-close" onClick={onClose} aria-label="Đóng">×</button></header>{children}</section></div>
+  return <AccessibleModal title={title} onClose={onClose}>{children}</AccessibleModal>
 }
 function SelectEmployee({ employees, value, onChange }: { employees: Employee[]; value: number; onChange: (id: number) => void }) {
   return <label className="v3-field">Nhân viên <select required value={value} onChange={e => onChange(Number(e.target.value))}><option value={0}>Chọn nhân viên</option>{employees.map(e => <option key={e.id} value={e.id}>{e.fullName} · {e.department}</option>)}</select></label>
@@ -57,7 +57,7 @@ function Submit({ busy, children = 'Lưu thay đổi' }: { busy: boolean; childr
 export function OrganizationPage({ version }: { version: number }) {
   const { items, loading, error } = useData<Org>('/organization', version)
   const total = items.reduce((n, d) => n + d.total, 0)
-  return <><Header eyebrow="TỔ CHỨC" title="Sơ đồ phòng ban" description="Nhìn nhanh cấu trúc nhân sự theo phòng ban. Bản này chưa hỗ trợ nhiều pháp nhân và cây tổ chức nhiều cấp."/>
+  return <><Header eyebrow="TỔ CHỨC" title="Sơ đồ phòng ban" description="Nhìn nhanh cơ cấu phòng ban, quy mô và hình thức làm việc của đội ngũ."/>
     <Surface title="Toàn cảnh tổ chức" subtitle={`${items.length} phòng ban · ${total} hồ sơ nhân sự`}><Feedback loading={loading} error={error} empty={!items.length}>
       <div className="v3-org-grid">{items.map((d, i) => <article className="v3-org-card" key={d.id}>
         <div className="v3-org-symbol" style={{ '--i': i % 5 } as CSSProperties}>{d.code.slice(0, 2)}</div>
@@ -74,7 +74,7 @@ export function ContractsPage({ session, version, reload, notify, employees }: C
   const [form, setForm] = useState({ employeeId: 0, contractCode: '', contractType: 'FixedTerm', startDate: '', endDate: '', status: 'Draft', notes: '' })
   async function add(e: FormEvent) {
     e.preventDefault(); setBusy(true)
-    try { await api.send('POST', '/contracts', { ...form, endDate: form.endDate || null }); notify('Đã lưu hợp đồng giả lập.'); setOpen(false); reload() }
+    try { await api.send('POST', '/contracts', { ...form, endDate: form.endDate || null }); notify('Đã lưu thông tin hợp đồng.'); setOpen(false); reload() }
     catch (x) { notify(x instanceof Error ? x.message : 'Không thể lưu hợp đồng.', false) }
     finally { setBusy(false) }
   }
@@ -84,20 +84,20 @@ export function ContractsPage({ session, version, reload, notify, employees }: C
   }
   const statuses: Record<string, string> = { Draft: 'Bản nháp', Active: 'Đang hiệu lực', Expired: 'Hết hạn', Terminated: 'Đã chấm dứt' }
   const types: Record<string, string> = { FixedTerm: 'Xác định thời hạn', Probation: 'Thử việc', Indefinite: 'Không xác định thời hạn', Internship: 'Thực tập', Contractor: 'Cộng tác / hợp đồng' }
-  return <><Header eyebrow="CORE HR · HỢP ĐỒNG" title="Hợp đồng lao động" description="Quản lý danh mục hợp đồng và thời hạn. Chưa bao gồm văn bản pháp lý, chữ ký số hoặc dữ liệu lương."
+  return <><Header eyebrow="CORE HR · HỢP ĐỒNG" title="Hợp đồng lao động" description="Theo dõi danh mục hợp đồng, ngày hiệu lực và thời hạn của từng nhân viên."
     action={hr(session.role) && <button className="v3-primary" onClick={() => setOpen(true)}>+ Thêm hợp đồng</button>}/>
     <Surface title="Danh sách hợp đồng" subtitle={hr(session.role) ? 'HR xem hợp đồng toàn hệ thống' : 'Chỉ hiển thị hợp đồng của bạn'}>
       <Feedback loading={loading} error={error} empty={!items.length}><div className="v3-table-scroll"><table className="v3-table"><thead><tr><th>Mã / Nhân viên</th><th>Loại hợp đồng</th><th>Ngày bắt đầu</th><th>Hết hạn</th><th>Trạng thái</th></tr></thead><tbody>
         {items.map(x => <tr key={x.id}><td><strong>{x.contractCode}</strong><small>{x.employee}</small></td><td>{types[x.contractType] ?? x.contractType}</td><td>{dateText(x.startDate)}</td><td>{dateText(x.endDate)}</td><td>{hr(session.role) ? <select className="v3-small-select" value={x.status} aria-label={`Trạng thái ${x.contractCode}`} onChange={e => update(x.id, e.target.value)}>{Object.entries(statuses).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select> : <Status kind={x.status === 'Active' ? 'positive' : 'warn'}>{statuses[x.status] ?? x.status}</Status>}</td></tr>)}
       </tbody></table></div></Feedback></Surface>
-    {open && <EditPanel title="Tạo hợp đồng mẫu" onClose={() => setOpen(false)}><form className="v3-form" onSubmit={add}>
+    {open && <EditPanel title="Thêm hợp đồng" onClose={() => setOpen(false)}><form className="v3-form" onSubmit={add}>
       <SelectEmployee employees={employees} value={form.employeeId} onChange={employeeId => setForm(v => ({ ...v, employeeId }))}/>
       <label className="v3-field">Mã hợp đồng<input required minLength={4} maxLength={48} placeholder="DEMO-HD-002" value={form.contractCode} onChange={e => setForm(v => ({ ...v, contractCode: e.target.value }))}/></label>
       <label className="v3-field">Loại<select value={form.contractType} onChange={e => setForm(v => ({ ...v, contractType: e.target.value }))}>{Object.entries(types).map(([k, v]) => <option value={k} key={k}>{v}</option>)}</select></label>
       <label className="v3-field">Ngày bắt đầu<input required type="date" value={form.startDate} onChange={e => setForm(v => ({ ...v, startDate: e.target.value }))}/></label>
       <label className="v3-field">Ngày kết thúc (nếu có)<input type="date" min={form.startDate} value={form.endDate} onChange={e => setForm(v => ({ ...v, endDate: e.target.value }))}/></label>
       <label className="v3-field">Ghi chú<textarea maxLength={500} value={form.notes} onChange={e => setForm(v => ({ ...v, notes: e.target.value }))}/></label>
-      <p className="v3-helper">Chỉ sử dụng dữ liệu giả. Không đưa hợp đồng thật hoặc thông tin ngân hàng vào bản demo.</p><Submit busy={busy}>Lưu hợp đồng</Submit></form></EditPanel>}
+      <p className="v3-helper">Lưu danh mục và thời hạn; bản này chưa hỗ trợ đính kèm tài liệu hoặc ký số.</p><Submit busy={busy}>Lưu hợp đồng</Submit></form></EditPanel>}
   </>
 }
 
@@ -117,11 +117,11 @@ export function OnboardingPage({ session, version, reload, notify, employees }: 
     catch (e) { notify(e instanceof Error ? e.message : 'Bạn không có quyền cập nhật.', false) }
   }
   const done = items.filter(x => x.status === 'Done').length
-  return <><Header eyebrow="EMPLOYEE LIFECYCLE" title="Onboarding & bàn giao" description="Checklist điều phối giữa HR, quản lý và nhân viên, giúp không bỏ sót công việc khi tiếp nhận nhân sự."
+  return <><Header eyebrow="EMPLOYEE LIFECYCLE" title="Tiếp nhận nhân viên" description="Checklist điều phối giữa HR, quản lý và nhân viên, giúp không bỏ sót công việc khi tiếp nhận nhân sự."
     action={hr(session.role) && <button className="v3-primary" onClick={() => setOpen(true)}>+ Tạo checklist</button>}/>
     <div className="v3-mini-overview"><div><strong>{items.length}</strong><span>Tổng công việc</span></div><div><strong>{done}</strong><span>Đã hoàn thành</span></div><div><strong>{items.length - done}</strong><span>Đang xử lý</span></div></div>
     <Surface title="Danh sách bàn giao"><Feedback loading={loading} error={error} empty={!items.length}><div className="v3-task-list">
-      {items.map(x => <article className="v3-task" key={x.id}><button className={`v3-task-check ${x.status === 'Done' ? 'is-done' : ''}`} onClick={() => toggle(x)} title="Đổi trạng thái công việc" aria-label={`Đánh dấu ${x.title}`}>
+      {items.map(x => <article className="v3-task" key={x.id}><button className={`v3-task-check ${x.status === 'Done' ? 'is-done' : ''}`} disabled={!hr(session.role) && !(x.employeeId === session.id && x.ownerRole === 'Employee') && !(session.role === 'Manager' && x.ownerRole === 'Manager')} onClick={() => toggle(x)} title="Đổi trạng thái công việc" aria-label={`Đánh dấu ${x.title}`}>
         {x.status === 'Done' ? '✓' : '○'}</button><div><strong className={x.status === 'Done' ? 'v3-completed' : ''}>{x.title}</strong><p>{x.employee} · {x.category} · Phụ trách: {x.ownerRole} · Hạn {dateText(x.dueDate)}</p></div><Status kind={x.status === 'Done' ? 'positive' : 'warn'}>{x.status === 'Done' ? 'Hoàn thành' : 'Chưa xong'}</Status></article>)}
     </div></Feedback></Surface>
     {open && <EditPanel title="Thêm công việc onboarding" onClose={() => setOpen(false)}><form className="v3-form" onSubmit={add}>
@@ -147,7 +147,7 @@ export function AttendancePage({ session, version, reload, notify }: Common) {
     catch (e) { notify(e instanceof Error ? e.message : 'Có lỗi khi ghi nhận công.', false) }
     finally { setBusy(false) }
   }
-  return <><Header eyebrow="WORKSPACE · TIMESHEET" title="Chấm công linh hoạt" description="Nhân viên tự check-in/check-out; quản lý xem theo phạm vi được phân quyền. Chưa xác thực GPS/IP hay tính lương."/>
+  return <><Header eyebrow="WORKSPACE · TIMESHEET" title="Chấm công linh hoạt" description="Ghi nhận giờ vào, giờ ra và xem lịch sử chấm công theo tháng."/>
     <div className="v3-attendance-top"><div><span className="v3-eyebrow">HÔM NAY</span><h2>Ghi nhận ngày làm việc</h2><p>Thao tác lưu thời điểm thật lên Backend. Mỗi nhân viên check-in tối đa một lần mỗi ngày.</p></div>
       <div className="v3-attendance-actions"><select aria-label="Mô hình làm việc" value={mode} onChange={e => setMode(e.target.value)}><option value="Hybrid">Hybrid</option><option value="Remote">Remote</option><option value="Onsite">Văn phòng</option></select><input placeholder="Ghi chú (tùy chọn)" maxLength={240} value={note} onChange={e => setNote(e.target.value)}/>
         <button className="v3-primary" disabled={busy || ownOpen} onClick={() => action('check-in')}>Bắt đầu ngày làm việc</button><button className="v3-secondary" disabled={busy || !ownOpen} onClick={() => action('check-out')}>Kết thúc ngày làm việc</button></div></div>
@@ -180,7 +180,7 @@ export function LearningPage({ session, version, reload, notify }: Common) {
     catch (e) { notify(e instanceof Error ? e.message : 'Có lỗi cập nhật.', false) }
   }
   const own = enrollments.items.filter(x => x.employeeId === session.id)
-  return <><Header eyebrow="LEARNING & DEVELOPMENT" title="Học tập & phát triển" description="Danh mục khóa học, đăng ký tự phục vụ và ghi nhận hoàn thành. Chưa kết nối LMS hoặc xác thực chứng chỉ."
+  return <><Header eyebrow="LEARNING & DEVELOPMENT" title="Học tập & phát triển" description="Khám phá khóa học, đăng ký và theo dõi quá trình học tập của bạn."
     action={hr(session.role) && <button className="v3-primary" onClick={() => setOpen(true)}>+ Thêm khóa học</button>}/>
     <Surface title="Khóa học dành cho bạn" subtitle="Chọn khóa học phù hợp với định hướng nghề nghiệp"><Feedback loading={courses.loading} error={courses.error} empty={!courses.items.length}>
       <div className="v3-course-grid">{courses.items.map((x, i) => <article className="v3-course" key={x.id}><div className={`v3-course-art art-${i % 4}`}><span>{x.code}</span><span>✦</span></div><div className="v3-course-body"><Status>{x.category}</Status><h3>{x.title}</h3><p>◷ {x.durationHours} giờ · {x.status === 'Published' ? 'Đang mở' : 'Tạm ẩn'}</p>
@@ -224,11 +224,12 @@ export function InsightsPage({ version, session }: { version: number; session: S
 
 export function RoadmapPage() {
   const groups = [
-    { title: 'Đã có nghiệp vụ & API', badge: 'Có thể kiểm thử', items: 'Core HR, phòng ban, yêu cầu Leave/WFH/OT, Skill Matrix, phân bổ dự án, IT Assets, ATS cơ bản, OKR, hợp đồng cơ bản, checklist onboarding, check-in/out web, đăng ký khóa học, báo cáo tổng hợp, nhật ký thay đổi.' },
-    { title: 'Cần hoàn thiện quy tắc và kiểm thử', badge: 'Giai đoạn tiếp theo', items: 'Quy trình nghỉ phép nhiều cấp, phép tồn, ca làm, OT theo hệ số, kỳ công, quy trình offboarding, hợp đồng có hiệu lực theo thời gian, phân quyền chi tiết theo phòng ban/pháp nhân, import/export, tích hợp email.' },
-    { title: 'Chưa đưa vào vận hành', badge: 'Yêu cầu thiết kế riêng', items: 'Payroll/BHXH/thuế TNCN, ký số, SSO/MFA, quản trị đa pháp nhân, workflow engine cấu hình, access provisioning, ngân hàng, Face ID/GPS, tài liệu nhân sự nhạy cảm, hạ tầng HA, backup/restore và kiểm thử bảo mật.' },
+    { title: 'Nghiệp vụ hoạt động trên hệ thống', badge: 'Web & Desktop dùng chung', items: 'Hồ sơ và phòng ban; cấp tài khoản; đăng nhập theo vai trò; đổi và đặt lại mật khẩu; đơn nghỉ/WFH/OT, hạn mức phép, phê duyệt và hủy đơn; chấm công; timesheet dự án; kỹ năng, phân bổ và tài sản; ATS và tiếp nhận ứng viên; hợp đồng; onboarding/offboarding; mục tiêu OKR; khóa học; thông báo; báo cáo và nhật ký.' },
+    { title: 'Lương demo có quy trình đầy đủ', badge: 'Nhập số liệu thủ công', items: 'Tạo kỳ lương → nhập lương cơ bản, phụ cấp, thưởng, khấu trừ → duyệt → quản trị viên phát hành → nhân viên xem và in phiếu lương. Kỳ đã phát hành được khóa. Chưa tự tính thuế, bảo hiểm, tiền OT, thanh toán hoặc tích hợp kế toán.' },
+    { title: 'Các phần cần tích hợp thêm', badge: 'Ngoài phạm vi bản hiện tại', items: 'SSO/MFA; gửi email, Slack/Teams; ký số và lưu tài liệu; nhiều pháp nhân; quy trình duyệt nhiều cấp; lịch nghỉ lễ, phép nửa ngày, chuyển phép; ca làm và GPS/Face ID; LMS; cấp/thu hồi tài khoản dịch vụ bên ngoài; báo cáo thuế/BHXH. Đây là bản trình diễn nghiệp vụ, chưa được chứng nhận để vận hành dữ liệu nhân sự thật.' },
   ]
-  return <><Header eyebrow="PROJECT TRANSPARENCY" title="Phạm vi & lộ trình" description="Theo dõi rõ phần nào chạy được, phần nào mới ở mức demo. Đây là bản trình diễn học thuật, không phải phần mềm HR có thể vận hành ngay với dữ liệu thật."/>
-    <div className="v3-roadmap">{groups.map((g, i) => <section className="v3-roadmap-card" key={g.title}><div className="v3-roadmap-index">0{i + 1}</div><Status kind={i === 0 ? 'positive' : 'warn'}>{g.badge}</Status><h2>{g.title}</h2><p>{g.items}</p></section>)}</div>
+  return <><Header eyebrow="TECHHRMS V4 / HƯỚNG DẪN" title="Phạm vi & cách trải nghiệm" description="Các chức năng hiện có, cách trình diễn luồng nghiệp vụ và phần cần phát triển tiếp."/>
+    <div className="v3-roadmap">{groups.map((g, i) => <section className="v3-roadmap-card" key={g.title}><div className="v3-roadmap-index">0{i + 1}</div><Status kind={i < 2 ? 'positive' : 'warn'}>{g.badge}</Status><h2>{g.title}</h2><p>{g.items}</p></section>)}</div>
+    <Surface title="Một vòng trải nghiệm đề xuất" subtitle="Sử dụng tài khoản của từng vai trò để kiểm tra phân quyền và dữ liệu."><ol className="v4-guide-list"><li>Admin tạo hồ sơ nhân viên và cấp tài khoản riêng.</li><li>Nhân viên đăng nhập, đổi mật khẩu tạm thời, cập nhật kỹ năng và gửi đơn nghỉ/WFH.</li><li>Quản lý đăng nhập bằng tài khoản khác, duyệt đơn và kiểm tra timesheet của đội ngũ.</li><li>HR chuẩn bị kỳ lương demo; Admin phát hành; nhân viên mở phiếu lương và in PDF.</li><li>HR tiếp nhận ứng viên từ Offer, kiểm tra checklist onboarding hoặc bàn giao nghỉ việc.</li></ol></Surface>
   </>
 }

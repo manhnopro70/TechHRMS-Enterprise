@@ -23,22 +23,24 @@ public static partial class HrEndpoints
         api.MapPost("/assets", async Task<IResult> (AssetInput input, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User)) return Results.Forbid();
+            await using var transaction = await Operations.BeginAsync(db);
             var tag = (input.AssetTag ?? "").Trim().ToUpperInvariant();
             var name = (input.Name ?? "").Trim();
             if (tag.Length is < 3 or > 30 || name.Length is < 3 or > 120) return Bad("Thông tin tài sản không hợp lệ.");
             if (await db.Assets.AnyAsync(x => x.AssetTag == tag)) return Bad("Mã tài sản đã tồn tại.");
-            if (input.AssignedToEmployeeId.HasValue && !await db.Employees.AnyAsync(x => x.Id == input.AssignedToEmployeeId)) return Bad("Nhân viên không tồn tại.");
+            if (input.AssignedToEmployeeId.HasValue && !await db.Employees.AnyAsync(x => x.Id == input.AssignedToEmployeeId && x.Status == "Active")) return Bad("Nhân viên không tồn tại.");
             var item = new ItAsset { AssetTag = tag, Name = name, AssignedToEmployeeId = input.AssignedToEmployeeId,
                 Status = input.AssignedToEmployeeId.HasValue ? "Assigned" : "Available" };
             db.Assets.Add(item);
             Access.Log(db, ctx.User, "Create", "Asset", tag);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { item.Id });
         });
 
         api.MapPut("/assets/{id:int}/assign", async Task<IResult> (int id, AssignAssetInput input, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User)) return Results.Forbid();
+            await using var transaction = await Operations.BeginAsync(db);
             var item = await db.Assets.FindAsync(id);
             if (item is null) return Results.NotFound();
             if (input.EmployeeId.HasValue && !await db.Employees.AnyAsync(x => x.Id == input.EmployeeId && x.Status == "Active"))
@@ -46,7 +48,7 @@ public static partial class HrEndpoints
             item.AssignedToEmployeeId = input.EmployeeId;
             item.Status = input.EmployeeId.HasValue ? "Assigned" : "Available";
             Access.Log(db, ctx.User, "Assign", "Asset", id.ToString());
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { item.Id });
         });
 
@@ -92,6 +94,7 @@ public static partial class HrEndpoints
         api.MapPost("/allocations", async Task<IResult> (AllocationInput input, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User) && !Access.IsManager(ctx.User)) return Results.Forbid();
+            await using var transaction = await Operations.BeginAsync(db);
             if (input.Percent is < 1 or > 100) return Bad("Tỷ lệ phân bổ từ 1 đến 100%.");
             if (!await db.Projects.AnyAsync(x => x.Id == input.TechProjectId)) return Bad("Dự án không tồn tại.");
             if (!await db.Employees.AnyAsync(x => x.Id == input.EmployeeId && x.Status == "Active")) return Bad("Nhân viên không hợp lệ.");
@@ -103,20 +106,21 @@ public static partial class HrEndpoints
             if (percent + input.Percent > 100) return Bad("Tổng phân bổ không được vượt quá 100%.");
             db.Allocations.Add(new ProjectAllocation { EmployeeId = input.EmployeeId, TechProjectId = input.TechProjectId, Percent = input.Percent });
             Access.Log(db, ctx.User, "Allocate", "Project", $"{input.EmployeeId}:{input.TechProjectId}");
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { message = "Đã phân bổ nhân sự." });
         });
 
         api.MapDelete("/allocations/{id:int}", async Task<IResult> (int id, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User) && !Access.IsManager(ctx.User)) return Results.Forbid();
+            await using var transaction = await Operations.BeginAsync(db);
             var item = await db.Allocations.FindAsync(id);
             if (item is null) return Results.NotFound();
             if (Access.IsManager(ctx.User) && !await Access.CanManageEmployee(db, ctx.User, item.EmployeeId))
                 return Results.Forbid();
             db.Allocations.Remove(item);
             Access.Log(db, ctx.User, "Remove", "Allocation", id.ToString());
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { message = "Đã thu hồi phân bổ." });
         });
 
@@ -124,7 +128,8 @@ public static partial class HrEndpoints
         {
             if (!Access.IsHr(ctx.User)) return Results.Forbid();
             return Results.Ok(await db.Candidates.OrderByDescending(x => x.AppliedAtUtc)
-                .Select(x => new { x.Id, x.FullName, x.Email, x.Position, x.Stage, x.AppliedAtUtc }).ToListAsync());
+                .Select(x => new { x.Id, x.FullName, x.Email, x.Position, x.Stage, x.AppliedAtUtc,
+                    hiredEmployeeId = db.CandidateHires.Where(h => h.CandidateId == x.Id).Select(h => (int?)h.EmployeeId).FirstOrDefault() }).ToListAsync());
         });
 
         api.MapPost("/candidates", async Task<IResult> (CandidateInput input, HttpContext ctx, HrDb db) =>
@@ -145,12 +150,14 @@ public static partial class HrEndpoints
         api.MapPut("/candidates/{id:int}/stage", async Task<IResult> (int id, StageInput input, HttpContext ctx, HrDb db) =>
         {
             if (!Access.IsHr(ctx.User)) return Results.Forbid();
+            await using var transaction = await Operations.BeginAsync(db);
             if (!AllowedStages.Contains(input.Stage)) return Bad("Vòng tuyển dụng không hợp lệ.");
             var item = await db.Candidates.FindAsync(id);
             if (item is null) return Results.NotFound();
+            if (await db.CandidateHires.AnyAsync(x => x.CandidateId == id)) return Bad("Ứng viên đã chuyển thành nhân viên; không đổi lại vòng tuyển dụng.");
             item.Stage = input.Stage;
             Access.Log(db, ctx.User, "UpdateStage", "Candidate", id.ToString());
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(); await transaction.CommitAsync();
             return Results.Ok(new { item.Id });
         });
 

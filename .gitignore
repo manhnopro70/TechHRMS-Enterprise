@@ -13,3 +13,7 @@
 **/.env.*
 !**/.env.example
 .DS_Store
+artifacts/
+**/*.exe.WebView2/
+**/__pycache__/
+test-results/

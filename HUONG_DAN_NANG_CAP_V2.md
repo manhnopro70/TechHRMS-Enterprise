@@ -1,3 +1,5 @@
+> Tài liệu lịch sử của bản cũ. Với gói V4, làm theo `HUONG-DAN.md` ở gốc project.
+
 # TechHRMS Premium v2.0 - Upgrade overlay
 
 This is an upgrade for the existing TechHRMS Fullstack Starter project, not a complete stand-alone project.

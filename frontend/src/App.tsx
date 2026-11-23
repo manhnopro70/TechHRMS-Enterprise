@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api } from './api'
-import type { Session, Page, Department, Employee, Dashboard, WorkRequest, Skill, Asset, Project, Allocation, Candidate, Objective, Audit, Role } from './types'
+import type { Session, Page, Department, Employee, Dashboard, WorkRequest, Skill, Asset, Project, Allocation, Objective, Audit, Role } from './types'
 import './App.css'
 import './premium.css'
 import './enterprise.css'
 import './refined.css'
-import { OrganizationPage, ContractsPage, OnboardingPage, AttendancePage, LearningPage, InsightsPage, RoadmapPage } from './EnterprisePages'
+import './workspace.css'
+import { AccountsPage, ProfilePage, PasswordRequired } from './AccountPages'
+import { RequestsPage, TimesheetsPage, NotificationsPage, requestLabel } from './WorkPages'
+import type { NotificationData } from './WorkPages'
+import { PayrollPage } from './PayrollPage'
+import { LifecyclePage } from './LifecyclePage'
+import { RecruitmentPage } from './RecruitmentPage'
+import { Modal as AccessibleModal, useResource } from './ui'
+import { OrganizationPage, ContractsPage, AttendancePage, LearningPage, InsightsPage, RoadmapPage } from './EnterprisePages'
 
 function Glyph({ name, size = 18 }: { name: string; size?: number }) {
   const shapes: Record<string, ReactNode> = {
@@ -47,14 +55,19 @@ function Glyph({ name, size = 18 }: { name: string; size?: number }) {
 
 const menu: { id: Page; label: string; icon: string; roles?: Role[] }[] = [
   { id: 'dashboard', label: 'Tổng quan', icon: 'home' },
+  { id: 'profile', label: 'Tài khoản của tôi', icon: 'users' },
+  { id: 'notifications', label: 'Thông báo', icon: 'bell' },
   { id: 'employees', label: 'Hồ sơ nhân viên', icon: 'users' },
   { id: 'departments', label: 'Phòng ban', icon: 'building', roles: ['Admin', 'HR', 'Manager'] },
   { id: 'organization', label: 'Sơ đồ tổ chức', icon: 'layers' },
   { id: 'contracts', label: 'Hợp đồng', icon: 'contract' },
-  { id: 'onboarding', label: 'Onboarding', icon: 'task' },
+  { id: 'onboarding', label: 'Tiếp nhận & nghỉ việc', icon: 'task' },
   { id: 'attendance', label: 'Chấm công', icon: 'checkin' },
   { id: 'requests', label: 'Nghỉ phép · WFH · OT', icon: 'calendar' },
   { id: 'skills', label: 'Ma trận kỹ năng', icon: 'sparkles' },
+  { id: 'timesheets', label: 'Timesheet dự án', icon: 'clock' },
+  { id: 'payroll', label: 'Lương & phiếu lương', icon: 'briefcase' },
+  { id: 'accounts', label: 'Tài khoản & phân quyền', icon: 'shield', roles: ['Admin'] },
   { id: 'projects', label: 'Dự án & nguồn lực', icon: 'projects' },
   { id: 'assets', label: 'Tài sản IT', icon: 'laptop' },
   { id: 'candidates', label: 'Tuyển dụng ATS', icon: 'briefcase', roles: ['Admin', 'HR'] },
@@ -65,7 +78,6 @@ const menu: { id: Page; label: string; icon: string; roles?: Role[] }[] = [
   { id: 'roadmap', label: 'Phạm vi dự án', icon: 'roadmap' },
 ]
 const canManage = (role: Role) => role === 'Admin' || role === 'HR'
-const canApprove = (role: Role) => canManage(role) || role === 'Manager'
 const formatDate = (value: string) => value ? new Date(value.slice(0, 10) + 'T00:00:00').toLocaleDateString('vi-VN') : '—'
 const initials = (name: string) => name.split(' ').slice(-2).map(p => p[0]).join('').toUpperCase()
 const badge = (status: string) => {
@@ -94,19 +106,7 @@ function useList<T>(url: string, version: number) {
   return { items, loading, error }
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    function esc(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', esc)
-    return () => window.removeEventListener('keydown', esc)
-  }, [onClose])
-  return <div className="modal-backdrop" onMouseDown={onClose}>
-    <div className="modal-card" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => e.stopPropagation()}>
-      <div className="modal-header"><h2>{title}</h2><button className="icon-button" aria-label="Đóng" onClick={onClose}>×</button></div>
-      {children}
-    </div>
-  </div>
-}
+const Modal = AccessibleModal
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="field"><span>{label}</span>{children}</label>
@@ -154,7 +154,7 @@ function Login({ onLogin }: { onLogin: (session: Session) => void }) {
         <h1>Chăm sóc con người.<br/><em>Thúc đẩy hiệu suất.</em></h1>
         <p>Quản lý nhân sự, chấm công, phát triển năng lực và vận hành đội ngũ công nghệ trong một nền tảng thống nhất.</p>
         <div className="login-features"><span>✓ Cổng nhân viên & quản trị</span><span>✓ Kỹ năng & nguồn lực</span><span>✓ Làm việc Hybrid</span></div>
-      </div><div className="login-bottom">TECHHRMS V3 · NỀN TẢNG NHÂN SỰ CHO CÔNG TY TECH</div>
+      </div><div className="login-bottom">TECHHRMS V4 · NỀN TẢNG NHÂN SỰ CHO CÔNG TY TECH</div>
     </div>
     <div className="login-panel"><form className="login-form" onSubmit={submit}>
       <div className="mobile-brand brand"><span className="brand-square"><Glyph name="sparkles" size={21}/></span><strong>TechHRMS</strong></div>
@@ -201,7 +201,7 @@ function DashboardPage({ session, version, onNavigate }: { session: Session; ver
         <div className="v3-hero-core"><Glyph name="users" size={36}/><span>People<br/>in sync</span></div>
         <div className="v3-hero-label">✦ Teamwork made simple</div></div>
     </div>
-    <div className="v3-between"><div><span className="v3-eyebrow">DỮ LIỆU HIỆN TẠI</span><h2>Bảng điều khiển</h2></div><span className="v3-live"><i/> Kết nối API TechHRMS</span></div>
+    <div className="v3-between"><div><span className="v3-eyebrow">DỮ LIỆU HIỆN TẠI</span><h2>Bảng điều khiển</h2></div><span className="v3-live"><i/> {error ? 'Chưa tải được dữ liệu' : 'Dữ liệu hệ thống'}</span></div>
     <ErrorMessage text={error}/>
     {!data ? <Loading/> : <>
       <div className="v3-metrics">{cards.map(c => <article className={`v3-metric ${c.tint}`} key={c.label}>
@@ -230,7 +230,7 @@ function DashboardPage({ session, version, onNavigate }: { session: Session; ver
   </div>
 }
 
-function EmployeesPage({ session, departments, version, reload, notify }: { session: Session; departments: Department[]; version: number; reload: () => void; notify: (s: string, good?: boolean) => void }) {
+function EmployeesPage({ session, departments, version, reload, notify, navigate }: { session: Session; departments: Department[]; version: number; reload: () => void; notify: (s: string, good?: boolean) => void; navigate: (page: Page) => void }) {
   const { items, loading, error } = useList<Employee>('/employees', version)
   const [query, setQuery] = useState('')
   const blank = { fullName: '', email: '', jobTitle: '', departmentId: 0, workMode: 'Hybrid', status: 'Active', isBench: false }
@@ -238,24 +238,27 @@ function EmployeesPage({ session, departments, version, reload, notify }: { sess
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const [createAccount, setCreateAccount] = useState(false)
+  const [accountRole, setAccountRole] = useState<Role>('Employee')
+  const [accountPassword, setAccountPassword] = useState('')
   const filtered = items.filter(x => `${x.fullName} ${x.email} ${x.jobTitle} ${x.department}`.toLowerCase().includes(query.toLowerCase()))
   const launch = (employee?: Employee) => {
-    setEditing(employee?.id ?? null)
+    setEditing(employee?.id ?? null); setCreateAccount(false); setAccountRole('Employee'); setAccountPassword('')
     setForm(employee ? { fullName: employee.fullName, email: employee.email, jobTitle: employee.jobTitle, departmentId: employee.departmentId,
       workMode: employee.workMode, status: employee.status, isBench: employee.isBench } : { ...blank, departmentId: departments[0]?.id ?? 0 })
     setOpen(true)
   }
   async function save(e: FormEvent) {
     e.preventDefault(); setBusy(true)
-    try { await api.send(editing ? 'PUT' : 'POST', editing ? `/employees/${editing}` : '/employees', form)
-      notify(editing ? 'Đã cập nhật nhân viên.' : 'Đã thêm hồ sơ nhân viên.'); setOpen(false); reload() }
+    try { await api.send(editing ? 'PUT' : 'POST', editing ? `/employees/${editing}` : '/employees', { ...form, ...(!editing && createAccount && session.role === 'Admin' ? { account: { role: accountRole, password: accountPassword } } : {}) })
+      notify(editing ? 'Đã cập nhật nhân viên.' : createAccount ? 'Đã tạo hồ sơ và tài khoản đăng nhập.' : 'Đã thêm hồ sơ nhân viên.'); setAccountPassword(''); setOpen(false); reload() }
     catch (err) { notify(err instanceof Error ? err.message : 'Không lưu được.', false) }
     finally { setBusy(false) }
   }
   return <>
     <PageTitle kicker="PEOPLE / DIRECTORY" title="Quản lý nhân sự" subtitle="Hồ sơ đội ngũ, mô hình làm việc, trạng thái và nguồn lực Bench."
       action={<div className="actions"><CsvButton rows={filtered}/>{canManage(session.role) && <button className="button primary" onClick={() => launch()}>＋ Thêm nhân viên</button>}</div>}/>
-    <div className="panel"><div className="toolbar"><input className="search" placeholder="⌕ Tìm theo tên, email, kỹ năng chức danh…" value={query} onChange={e => setQuery(e.target.value)}/><span className="result-count">{filtered.length} nhân sự</span></div>
+    <div className="panel"><div className="toolbar"><input className="search" aria-label="Tìm hồ sơ nhân viên" placeholder="Tìm tên, email, chức danh hoặc phòng ban…" value={query} onChange={e => setQuery(e.target.value)}/><span className="result-count">{filtered.length} nhân sự</span></div>
       <ErrorMessage text={error}/>{loading ? <Loading/> : filtered.length === 0 ? <Empty text="Không tìm thấy nhân viên phù hợp."/> :
         <div className="table-scroll"><table><thead><tr><th>Nhân viên</th><th>Chức danh</th><th>Phòng ban</th><th>Hình thức</th><th>Trạng thái</th>{canManage(session.role) && <th>Thao tác</th>}</tr></thead>
           <tbody>{filtered.map(x => <tr key={x.id}><td><div className="person"><Avatar name={x.fullName}/><div><strong>{x.fullName}</strong><small>{x.email}</small></div></div></td><td>{x.jobTitle}{x.isBench && <span className="mini-tag">Bench</span>}</td><td>{x.department}</td><td>{badge(x.workMode)}</td><td>{badge(x.status)}</td>{canManage(session.role) && <td><button className="text-button" onClick={() => launch(x)}>Chỉnh sửa</button></td>}</tr>)}</tbody></table></div>}
@@ -269,61 +272,30 @@ function EmployeesPage({ session, departments, version, reload, notify }: { sess
         <Field label="Mô hình làm việc"><select value={form.workMode} onChange={e => setForm({ ...form, workMode: e.target.value })}><option value="Hybrid">Hybrid</option><option value="Remote">Remote</option><option value="Onsite">Onsite</option></select></Field>
         <Field label="Trạng thái"><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}><option value="Active">Đang làm</option><option value="OnLeave">Đang nghỉ</option><option value="Inactive">Ngừng làm</option></select></Field>
       </div><label className="checkline"><input type="checkbox" checked={form.isBench} onChange={e => setForm({ ...form, isBench: e.target.checked })}/> Nhân viên đang On Bench</label>
-      <div className="form-info">Lưu hồ sơ chưa tự tạo tài khoản đăng nhập. Quy trình cấp tài khoản sẽ bổ sung trong giai đoạn tiếp theo.</div>
+      {session.role === 'Admin' && !editing && <div className="v4-account-option"><label className="checkline"><input type="checkbox" checked={createAccount} onChange={e => setCreateAccount(e.target.checked)}/> Cấp tài khoản đăng nhập ngay</label>{createAccount && <div className="form-grid"><Field label="Vai trò"><select value={accountRole} onChange={e => setAccountRole(e.target.value as Role)}><option value="Employee">Nhân viên</option><option value="Manager">Quản lý</option><option value="HR">Nhân sự</option><option value="Admin">Quản trị viên</option></select></Field><Field label="Mật khẩu tạm thời"><input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={accountPassword} onChange={e => setAccountPassword(e.target.value)}/></Field><p className="v4-note">Dùng email công việc để đăng nhập. Nhân viên sẽ đổi mật khẩu tạm thời ở lần đăng nhập đầu.</p></div>}</div>}
+      {editing && session.role === 'Admin' && <div className="form-info">Quản lý quyền đăng nhập của nhân viên tại <button type="button" className="text-button" onClick={() => navigate('accounts')}>Tài khoản & phân quyền →</button></div>}
       <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setOpen(false)}>Hủy</button><button disabled={busy} className="button primary" type="submit">{busy ? 'Đang lưu…' : 'Lưu thông tin'}</button></div></form>
     </Modal>}
   </>
 }
 
 function DepartmentsPage({ departments, session, reload, notify }: { departments: Department[]; session: Session; reload: () => void; notify: (s: string, good?: boolean) => void }) {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState(''); const [code, setCode] = useState('')
+  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState<number | null>(null)
+  const [name, setName] = useState(''), [code, setCode] = useState('')
+  function launch(department?: Department) { setEditing(department?.id ?? null); setName(department?.name ?? ''); setCode(department?.code ?? ''); setOpen(true) }
   async function submit(e: FormEvent) {
-    e.preventDefault()
-    try { await api.send('POST', '/departments', { name, code }); notify('Đã tạo phòng ban.'); setOpen(false); setName(''); setCode(''); reload() }
-    catch (err) { notify(err instanceof Error ? err.message : 'Không tạo được phòng ban.', false) }
+    e.preventDefault(); setBusy(true)
+    try { await api.send(editing ? 'PUT' : 'POST', editing ? `/departments/${editing}` : '/departments', { name, code }); notify(editing ? 'Đã cập nhật phòng ban.' : 'Đã tạo phòng ban.'); setOpen(false); reload() }
+    catch (err) { notify(err instanceof Error ? err.message : 'Không lưu được phòng ban.', false) }
+    finally { setBusy(false) }
   }
-  return <><PageTitle kicker="PEOPLE / ORGANIZATION" title="Phòng ban" subtitle="Cơ cấu tổ chức và quy mô nhân sự theo từng bộ phận."
-    action={canManage(session.role) && <button className="button primary" onClick={() => setOpen(true)}>＋ Thêm phòng ban</button>}/>
-    <div className="department-grid">{departments.map(dep => <div className="department-card" key={dep.id}><div className="department-icon">▦</div><span className="dept-code">{dep.code}</span><h3>{dep.name}</h3><div className="metric-inline"><span>Nhân viên</span><strong>{dep.employeeCount}</strong></div></div>)}</div>
-    {open && <Modal title="Thêm phòng ban" onClose={() => setOpen(false)}><form className="form-body" onSubmit={submit}>
+  return <><PageTitle kicker="CON NGƯỜI / TỔ CHỨC" title="Phòng ban" subtitle="Cơ cấu tổ chức và quy mô nhân sự theo từng bộ phận."
+    action={canManage(session.role) && <button className="button primary" onClick={() => launch()}>＋ Thêm phòng ban</button>}/>
+    <div className="department-grid">{departments.map(dep => <div className="department-card" key={dep.id}><div className="department-icon">▦</div><span className="dept-code">{dep.code}</span><h3>{dep.name}</h3><div className="metric-inline"><span>Nhân viên</span><strong>{dep.employeeCount}</strong></div>{canManage(session.role) && <button className="text-button" onClick={() => launch(dep)}>Chỉnh sửa phòng ban</button>}</div>)}</div>
+    {open && <Modal title={editing ? 'Chỉnh sửa phòng ban' : 'Thêm phòng ban'} onClose={() => { if (!busy) setOpen(false) }}><form className="form-body v4-stack" onSubmit={submit}>
       <Field label="Mã phòng ban"><input required minLength={2} maxLength={12} value={code} onChange={e => setCode(e.target.value)} placeholder="VD: QA"/></Field>
       <Field label="Tên phòng ban"><input required minLength={2} maxLength={100} value={name} onChange={e => setName(e.target.value)} placeholder="VD: Quality Assurance"/></Field>
-      <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setOpen(false)}>Hủy</button><button className="button primary">Tạo phòng ban</button></div>
-    </form></Modal>}
-  </>
-}
-
-const requestLabel: Record<string, string> = { Leave: 'Nghỉ phép', WFH: 'Làm việc từ xa', OT: 'Làm thêm giờ' }
-function RequestsPage({ session, version, reload, notify }: { session: Session; version: number; reload: () => void; notify: (s: string, good?: boolean) => void }) {
-  const { items, error, loading } = useList<WorkRequest>('/requests', version)
-  const today = new Date().toISOString().slice(0, 10)
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ type: 'Leave', startDate: today, endDate: today, reason: '' })
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    try { await api.send('POST', '/requests', form); notify('Đã gửi yêu cầu chờ phê duyệt.'); setOpen(false); reload() }
-    catch (err) { notify(err instanceof Error ? err.message : 'Không gửi được yêu cầu.', false) }
-  }
-  async function decide(item: WorkRequest, status: string) {
-    if (!window.confirm(`${status === 'Approved' ? 'Duyệt' : 'Từ chối'} đơn của ${item.employee}?`)) return
-    try { await api.send('POST', `/requests/${item.id}/decision`, { status, note: '' }); notify('Đã xử lý đơn.'); reload() }
-    catch (err) { notify(err instanceof Error ? err.message : 'Không xử lý được đơn.', false) }
-  }
-  return <><PageTitle kicker="WORKSPACE / WORKFLOW" title="Đơn từ & phê duyệt" subtitle="Nghỉ phép, làm việc từ xa và OT theo quy trình có trạng thái."
-    action={<button className="button primary" onClick={() => setOpen(true)}>＋ Tạo yêu cầu</button>}/>
-    <div className="panel"><div className="panel-heading"><div><h3>Lịch sử yêu cầu</h3><p>Chỉ hiển thị đơn bạn có quyền xem</p></div><span className="small-pill">{items.filter(x => x.status === 'Pending').length} chờ duyệt</span></div>
-      <ErrorMessage text={error}/>{loading ? <Loading/> : !items.length ? <Empty text="Chưa có đơn nào."/> :
-        <div className="table-scroll"><table><thead><tr><th>Người gửi</th><th>Loại đơn</th><th>Thời gian</th><th>Lý do</th><th>Trạng thái</th>{canApprove(session.role) && <th>Phê duyệt</th>}</tr></thead><tbody>
-          {items.map(x => <tr key={x.id}><td><strong>{x.employee}</strong></td><td>{requestLabel[x.type] ?? x.type}</td><td>{formatDate(x.startDate)}{x.endDate !== x.startDate ? ` – ${formatDate(x.endDate)}` : ''}</td><td className="truncate-cell" title={x.reason}>{x.reason}</td><td>{badge(x.status)}</td>
-            {canApprove(session.role) && <td>{x.status === 'Pending' && x.employeeId !== session.id ? <div className="table-actions"><button className="text-button approve" onClick={() => decide(x, 'Approved')}>Duyệt</button><button className="text-button reject" onClick={() => decide(x, 'Rejected')}>Từ chối</button></div> : <span className="muted">—</span>}</td>}</tr>)}</tbody></table></div>}
-    </div>
-    {open && <Modal title="Gửi yêu cầu mới" onClose={() => setOpen(false)}><form onSubmit={submit} className="form-body">
-      <Field label="Loại yêu cầu"><select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="Leave">Nghỉ phép</option><option value="WFH">Làm việc từ xa (WFH)</option><option value="OT">Làm thêm giờ (OT)</option></select></Field>
-      <div className="form-grid"><Field label="Từ ngày"><input type="date" required value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })}/></Field><Field label="Đến ngày"><input type="date" required min={form.startDate} value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })}/></Field></div>
-      <Field label="Lý do"><textarea required minLength={5} maxLength={500} rows={3} value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })}/></Field>
-      <div className="form-info">Bản demo ghi nhận và phê duyệt đơn. Chưa tính hạn mức nghỉ phép hoặc tiền OT thực tế.</div>
-      <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setOpen(false)}>Hủy</button><button className="button primary">Gửi yêu cầu</button></div>
+      <div className="modal-actions"><button type="button" disabled={busy} className="button secondary" onClick={() => setOpen(false)}>Hủy</button><button disabled={busy} className="button primary">{busy ? 'Đang lưu…' : 'Lưu phòng ban'}</button></div>
     </form></Modal>}
   </>
 }
@@ -438,44 +410,10 @@ function ProjectsPage({ session, employees, version, reload, notify }: { session
   </>
 }
 
-const stages = [
-  { code: 'Applied', name: 'Nộp hồ sơ' }, { code: 'TechnicalTest', name: 'Test kỹ thuật' },
-  { code: 'Interview', name: 'Phỏng vấn' }, { code: 'Offer', name: 'Offer' },
-  { code: 'Hired', name: 'Đã tuyển' }, { code: 'Rejected', name: 'Từ chối' },
-]
-function CandidatesPage({ version, reload, notify }: { version: number; reload: () => void; notify: (s: string, good?: boolean) => void }) {
-  const { items, loading, error } = useList<Candidate>('/candidates', version)
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ fullName: '', email: '', position: '' })
-  async function add(e: FormEvent) {
-    e.preventDefault()
-    try { await api.send('POST', '/candidates', form); notify('Đã thêm ứng viên.'); setOpen(false); reload() }
-    catch (err) { notify(err instanceof Error ? err.message : 'Không thêm được ứng viên.', false) }
-  }
-  async function move(id: number, stage: string) {
-    try { await api.send('PUT', `/candidates/${id}/stage`, { stage }); notify('Đã chuyển vòng tuyển dụng.'); reload() }
-    catch (err) { notify(err instanceof Error ? err.message : 'Không chuyển được vòng.', false) }
-  }
-  return <><PageTitle kicker="TALENT / RECRUITMENT" title="Tuyển dụng ATS" subtitle="Theo dõi ứng viên qua các vòng tuyển dụng bằng bảng Kanban."
-    action={<button className="button primary" onClick={() => setOpen(true)}>＋ Thêm ứng viên</button>}/>
-    <ErrorMessage text={error}/>{loading ? <Loading/> : <div className="kanban">{stages.map(stage => <section className="kanban-column" key={stage.code}>
-      <div className="kanban-heading"><h3>{stage.name}</h3><span>{items.filter(x => x.stage === stage.code).length}</span></div>
-      {items.filter(x => x.stage === stage.code).map(c => <article className="candidate-card" key={c.id}><div className="person"><Avatar name={c.fullName}/><strong>{c.fullName}</strong></div>
-        <p>{c.position}</p><small>{c.email}</small><select aria-label={`Chuyển vòng ${c.fullName}`} value={c.stage} onChange={e => move(c.id, e.target.value)}>{stages.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}</select>
-      </article>)}
-    </section>)}</div>}
-    {open && <Modal title="Thêm ứng viên" onClose={() => setOpen(false)}><form className="form-body" onSubmit={add}>
-      <Field label="Họ và tên"><input required minLength={2} value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}/></Field>
-      <Field label="Email"><input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field>
-      <Field label="Vị trí ứng tuyển"><input required minLength={2} value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}/></Field>
-      <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setOpen(false)}>Hủy</button><button className="button primary">Thêm ứng viên</button></div></form></Modal>}
-  </>
-}
-
 function ObjectivesPage({ session, employees, version, reload, notify }: { session: Session; employees: Employee[]; version: number; reload: () => void; notify: (s: string, good?: boolean) => void }) {
   const { items, loading, error } = useList<Objective>('/objectives', version)
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ employeeId: session.id, title: '', quarter: 'Q4-2026' })
+  const [form, setForm] = useState({ employeeId: session.id, title: '', quarter: `Q${Math.floor(new Date().getMonth() / 3) + 1}-${new Date().getFullYear()}` })
   const [updates, setUpdates] = useState<Record<number, number>>({})
   async function add(e: FormEvent) {
     e.preventDefault()
@@ -505,14 +443,15 @@ function ObjectivesPage({ session, employees, version, reload, notify }: { sessi
 function AuditPage({ version }: { version: number }) {
   const { items, loading, error } = useList<Audit>('/audit', version)
   return <><PageTitle kicker="SYSTEM / AUDIT TRAIL" title="Nhật ký hoạt động" subtitle="Lịch sử thay đổi cơ bản trên hệ thống, chỉ Admin được xem."/>
-    <div className="panel"><ErrorMessage text={error}/>{loading ? <Loading/> : !items.length ? <Empty/> : <div className="table-scroll"><table><thead><tr><th>Thời điểm (UTC)</th><th>Nhân viên thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>
+    <div className="panel"><ErrorMessage text={error}/>{loading ? <Loading/> : !items.length ? <Empty/> : <div className="table-scroll"><table><thead><tr><th>Thời điểm</th><th>Nhân viên thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>
     {items.map(x => <tr key={x.id}><td>{new Date(x.atUtc).toLocaleString('vi-VN')}</td><td>#{x.actorEmployeeId}</td><td>{x.action}</td><td>{x.entity}</td><td>{x.details}</td></tr>)}
     </tbody></table></div>}</div>
   </>
 }
 
-function Shell({ session, onLogout }: { session: Session; onLogout: () => void }) {
-  const [page, setPage] = useState<Page>('dashboard')
+function Shell({ session, onLogout, onSession }: { session: Session; onLogout: () => void; onSession: (session: Session) => void }) {
+  const readPage = () => { const key = location.hash.replace(/^#\/?/, '').split('/')[0]; const id = key === 'offboarding' ? 'onboarding' : key; return menu.some(x => x.id === id && (!x.roles || x.roles.includes(session.role))) ? id as Page : 'dashboard' }
+  const [page, setPage] = useState<Page>(readPage)
   const [version, setVersion] = useState(0)
   const [toast, setToast] = useState<{ text: string; good: boolean } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -521,19 +460,20 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const deps = useList<Department>('/departments', version)
   const emps = useList<Employee>('/employees', version)
-  const inbox = useList<WorkRequest>('/requests', version)
+  const inbox = useResource<NotificationData>('/notifications', version, 30000)
   const available = menu.filter(x => !x.roles || x.roles.includes(session.role))
-  const pending = inbox.items.filter(x => x.status === 'Pending')
+  const unread = inbox.data?.unreadCount ?? 0
+  useEffect(() => { const sync = () => { setPage(readPage()); setMenuOpen(false); setSearchOpen(false) }; window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [session.role])
   const navGroups = [
-    { label: 'KHÔNG GIAN', pages: ['dashboard'] },
+    { label: 'KHÔNG GIAN', pages: ['dashboard', 'profile'] },
     { label: 'CON NGƯỜI', pages: ['employees', 'departments', 'organization', 'contracts', 'onboarding'] },
-    { label: 'CÔNG VIỆC', pages: ['attendance', 'requests', 'skills', 'projects', 'assets'] },
+    { label: 'CÔNG VIỆC', pages: ['attendance', 'requests', 'skills', 'projects', 'timesheets', 'assets'] },
     { label: 'PHÁT TRIỂN', pages: ['candidates', 'objectives', 'learning'] },
-    { label: 'DỮ LIỆU & QUẢN TRỊ', pages: ['insights', 'audit', 'roadmap'] },
+    { label: 'DỮ LIỆU & QUẢN TRỊ', pages: ['payroll', 'insights', 'accounts', 'audit', 'roadmap'] },
   ]
   function notify(text: string, good = true) { setToast({ text, good }) }
   function reload() { setVersion(x => x + 1) }
-  function navigate(destination: Page) { setPage(destination); setMenuOpen(false); setSearchOpen(false); setNotificationsOpen(false); setToast(null) }
+  function navigate(destination: Page) { if (!available.some(item => item.id === destination)) return; location.hash = `/${destination}`; setPage(destination); setMenuOpen(false); setSearchOpen(false); setNotificationsOpen(false); setToast(null) }
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(value => !value) }
@@ -544,14 +484,14 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   }, [])
   async function logout() {
     try { await api.logout(); onLogout() }
-    catch (e) { notify(e instanceof Error ? e.message : 'Could not sign out.', false) }
+    catch (e) { notify(e instanceof Error ? e.message : 'Không thể đăng xuất. Vui lòng thử lại.', false) }
   }
   return <div className="app-shell premium-shell refined-shell">
-    {menuOpen && <button className="mobile-overlay" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>}
+    {menuOpen && <button className="mobile-overlay" aria-label="Đóng menu" onClick={() => setMenuOpen(false)}/>}
     <aside className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
-      <div className="brand"><span className="brand-square"><Glyph name="sparkles" size={21}/></span><strong>Tech<span>HRMS</span></strong><span className="brand-v2">V3.1</span></div>
+      <div className="brand"><span className="brand-square"><Glyph name="sparkles" size={21}/></span><strong>Tech<span>HRMS</span></strong><span className="brand-v2">V4.0</span></div>
       <div className="sidebar-workspace"><span className="workspace-logo"><Glyph name="layers" size={18}/></span><div><strong>Tech Enterprise</strong><small>{session.role === 'Employee' ? 'Employee portal' : session.role === 'Manager' ? 'Manager portal' : 'HR & Admin portal'}</small></div><Glyph name="chevron" size={15}/></div>
-      <nav aria-label="Primary navigation">{navGroups.map(group => {
+      <nav aria-label="Menu chính">{navGroups.map(group => {
         const items = available.filter(item => group.pages.includes(item.id))
         if (!items.length) return null
         return <div key={group.label} className="nav-group"><div className="menu-heading">{group.label}</div>{items.map(item =>
@@ -564,59 +504,71 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             <Glyph name="search" size={18}/><span>Tìm phân hệ</span><kbd>Ctrl K</kbd>
           </button>
           <div className="notifications-box sidebar-notifications">
-            <button className="sidebar-tool" aria-label={`Thông báo, ${pending.length} đơn đang chờ`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(x => !x)}>
-              <Glyph name="bell" size={18}/><span>Thông báo</span>{pending.length > 0 && <b className="sidebar-count">{pending.length}</b>}
+            <button className="sidebar-tool" aria-label={`Thông báo, ${unread} chưa đọc`} aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen(x => !x)}>
+              <Glyph name="bell" size={18}/><span>Thông báo</span>{unread > 0 && <b className="sidebar-count">{unread}</b>}
             </button>
             {notificationsOpen && <div className="notification-panel" role="region" aria-label="Thông báo đơn từ">
-              <div><strong>Đơn từ đang chờ</strong><span>{pending.length} đang chờ</span></div>
-              {pending.length ? pending.slice(0,3).map(x => <button key={x.id} onClick={() => navigate('requests')}><span className="notice-pip"/><span><strong>{x.employee}</strong><small>{x.type} · {formatDate(x.startDate)}</small></span></button>) : <p>Chưa có đơn nào chờ xử lý.</p>}
-              <button className="notice-all" onClick={() => navigate('requests')}>Xem đơn từ <Glyph name="arrow" size={15}/></button>
+              <div><strong>Thông báo mới</strong><span>{unread} chưa đọc</span></div>
+              {inbox.error ? <p>{inbox.error}</p> : inbox.data?.items.length ? inbox.data.items.slice(0, 3).map(item => <button key={item.id} onClick={() => navigate('notifications')}><span className="notice-pip"/><span><strong>{item.title}</strong><small>{item.message}</small></span></button>) : <p>Chưa có thông báo mới.</p>}
+              <button className="notice-all" onClick={() => navigate('notifications')}>Mở hộp thông báo <Glyph name="arrow" size={15}/></button>
             </div>}
           </div>
           <button className="sidebar-tool signout-tool" onClick={logout} aria-label="Đăng xuất"><Glyph name="logout" size={18}/><span>Đăng xuất</span></button>
         </div>
-        <button className="v3-sidebar-help" onClick={() => navigate('roadmap')}><Glyph name="shield" size={17}/> Xem phạm vi & độ tin cậy</button>
-        <div className="sidebar-version">TECHHRMS · ENTERPRISE DEMO V3.1</div>
+        <button className="v3-sidebar-help" onClick={() => navigate('roadmap')}><Glyph name="shield" size={17}/> Phạm vi & hướng dẫn</button>
+        <div className="sidebar-version">TECHHRMS · ENTERPRISE DEMO V4.0</div>
       </div>
     </aside>
     <div className="main-area"><header className="topbar">
-      <div className="topbar-left"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Glyph name="menu" size={22}/></button><div className="location"><span>TECHHRMS / WORKSPACE</span><strong>{available.find(x => x.id === page)?.label}</strong></div></div>
+      <div className="topbar-left"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Mở menu điều hướng"><Glyph name="menu" size={22}/></button><div className="location"><span>TECHHRMS / WORKSPACE</span><strong>{available.find(x => x.id === page)?.label}</strong></div></div>
       <div className="topbar-status"><span className="system-dot" aria-hidden="true"/><span>Không gian <strong>{session.role === 'Employee' ? 'Nhân viên' : session.role === 'Manager' ? 'Quản lý' : session.role === 'HR' ? 'Nhân sự' : 'Quản trị'}</strong></span><span className="topbar-demo">DEMO</span></div>
     </header>
     <main className="content">
       {page === 'dashboard' && <DashboardPage session={session} version={version} onNavigate={navigate}/>}
-      {page === 'employees' && <EmployeesPage session={session} departments={deps.items} version={version} reload={reload} notify={notify}/>}
+      {page === 'employees' && <EmployeesPage session={session} departments={deps.items} version={version} reload={reload} notify={notify} navigate={navigate}/>}
       {page === 'departments' && <DepartmentsPage session={session} departments={deps.items} reload={reload} notify={notify}/>}
-      {page === 'requests' && <RequestsPage session={session} version={version} reload={reload} notify={notify}/>}
+      {page === 'requests' && <RequestsPage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
       {page === 'skills' && <SkillsPage session={session} employees={emps.items} version={version} reload={reload} notify={notify}/>}
       {page === 'projects' && <ProjectsPage session={session} employees={emps.items} version={version} reload={reload} notify={notify}/>}
       {page === 'assets' && <AssetsPage session={session} employees={emps.items} version={version} reload={reload} notify={notify}/>}
-      {page === 'candidates' && <CandidatesPage version={version} reload={reload} notify={notify}/>}
+      {page === 'candidates' && <RecruitmentPage version={version} reload={reload} notify={notify} departments={deps.items}/>}
       {page === 'objectives' && <ObjectivesPage session={session} employees={emps.items} version={version} reload={reload} notify={notify}/>}
       {page === 'audit' && <AuditPage version={version}/>}
       {page === 'organization' && <OrganizationPage version={version}/>}
       {page === 'contracts' && <ContractsPage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
-      {page === 'onboarding' && <OnboardingPage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
+      {page === 'onboarding' && <LifecyclePage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
       {page === 'attendance' && <AttendancePage session={session} version={version} reload={reload} notify={notify}/>}
       {page === 'learning' && <LearningPage session={session} version={version} reload={reload} notify={notify}/>}
       {page === 'insights' && <InsightsPage version={version} session={session}/>}
+      {page === 'accounts' && <AccountsPage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
+      {page === 'profile' && <ProfilePage session={session} version={version} reload={reload} notify={notify} onSession={onSession}/>}
+      {page === 'timesheets' && <TimesheetsPage session={session} version={version} reload={reload} notify={notify}/>}
+      {page === 'payroll' && <PayrollPage session={session} version={version} reload={reload} notify={notify} employees={emps.items}/>}
+      {page === 'notifications' && <NotificationsPage data={inbox.data} error={inbox.error} loading={inbox.loading} reload={reload} notify={notify} navigate={navigate}/>}
       {page === 'roadmap' && <RoadmapPage/>}
-      <footer className="content-footer"><span>TECHHRMS / ENTERPRISE V3.1</span><span>Phiên bản thử nghiệm · Chỉ dùng dữ liệu giả lập</span></footer>
+      <footer className="content-footer"><span>TECHHRMS / ENTERPRISE V4.0</span><span>TechHRMS Demo · Không gian nhân sự của bạn</span></footer>
     </main></div>
     {searchOpen && <Modal title="Tìm nhanh phân hệ" onClose={() => setSearchOpen(false)}><div className="command-search"><div className="command-input"><Glyph name="search" size={19}/><input autoFocus placeholder="Tìm chức năng, nghiệp vụ..." value={query} onChange={e => setQuery(e.target.value)}/></div><div className="command-result-label">CÁC PHÂN HỆ BẠN CÓ THỂ TRUY CẬP</div>{available.filter(x => x.label.toLowerCase().includes(query.toLowerCase()) || x.id.includes(query.toLowerCase())).map(item => <button key={item.id} onClick={() => navigate(item.id)}><Glyph name={item.icon} size={19}/><span>{item.label}</span><Glyph name="arrow" size={17}/></button>)}<p>Mẹo: Nhấn Ctrl+K để mở hộp tìm kiếm ở bất kỳ trang nào.</p></div></Modal>}
-    {toast && <div className={`toast ${toast.good ? 'success' : 'failure'}`} role="status"><span>{toast.good ? <Glyph name="check" size={19}/> : '!'}</span><p>{toast.text}</p><button aria-label="Close notification" onClick={() => setToast(null)}>×</button></div>}
+    {toast && <div className={`toast ${toast.good ? 'success' : 'failure'}`} role="status"><span>{toast.good ? <Glyph name="check" size={19}/> : '!'}</span><p>{toast.text}</p><button aria-label="Đóng thông báo" onClick={() => setToast(null)}>×</button></div>}
   </div>
 }
 
 function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [startupError, setStartupError] = useState('')
-  useEffect(() => { let active = true; api.me().then(data => { if (active) setSession(data) })
-    .catch(e => { if (active) { setStartupError(e instanceof Error ? e.message : 'Có lỗi khi kết nối.'); setSession(null) } })
-    return () => { active = false } }, [])
+  useEffect(() => {
+    let active = true
+    api.me().then(data => { if (active) setSession(data) }).catch(e => { if (active) { setStartupError(e instanceof Error ? e.message : 'Chưa kết nối được máy chủ.'); setSession(null) } })
+    const expired = () => { setStartupError('Phiên đăng nhập đã kết thúc. Đăng nhập lại để tiếp tục; dữ liệu đã lưu vẫn được giữ nguyên.'); setSession(null) }
+    const passwordRequired = () => setSession(value => value ? { ...value, mustChangePassword: true } : value)
+    window.addEventListener('techhrms:session-expired', expired)
+    window.addEventListener('techhrms:password-required', passwordRequired)
+    return () => { active = false; window.removeEventListener('techhrms:session-expired', expired); window.removeEventListener('techhrms:password-required', passwordRequired) }
+  }, [])
   if (session === undefined) return <div className="boot"><div className="brand"><span className="brand-square"><Glyph name="sparkles" size={21}/></span><strong>TechHRMS</strong></div><Loading/></div>
-  if (session === null) return <>{startupError && <div className="startup-warning">{startupError}</div>}<Login onLogin={value => { setStartupError(''); setSession(value) }}/></>
-  return <Shell session={session} onLogout={() => setSession(null)}/>
+  if (session === null) return <>{startupError && <div className="startup-warning" role="status">{startupError}</div>}<Login onLogin={value => { setStartupError(''); setSession(value) }}/></>
+  if (session.mustChangePassword) return <PasswordRequired session={session} onSession={setSession} onLogout={() => { setStartupError(''); setSession(null) }}/>
+  return <Shell session={session} onSession={setSession} onLogout={() => { setStartupError(''); setSession(null) }}/>
 }
 
 export default App
